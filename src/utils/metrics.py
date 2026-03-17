@@ -1,13 +1,31 @@
-from typing import Dict
+from __future__ import annotations
 
-def compute_average_latency(state: Dict) -> float:
-    total_latency = 0.0
-    count = 0
+from dataclasses import dataclass, field
+from typing import Dict, List
+import statistics
 
-    for user in state["users"]:
-        server_id = user["connected_server_id"]
-        if server_id is not None:
-            total_latency += user["latency_to_servers"][server_id]
-            count += 1
-        
-    return total_latency / count if count > 0 else 0.0
+
+@dataclass
+class StepMetrics:
+    avg_delay: float = 0.0
+    migration_count: int = 0
+    failed_allocations: int = 0
+    total_cost: float = 0.0
+    avg_load_ratio: float = 0.0
+
+
+@dataclass
+class SimulationMetrics:
+    step_metrics: List[StepMetrics] = field(default_factory=list)
+
+    def summary(self) -> Dict[str, float]:
+        if not self.step_metrics:
+            return {}
+
+        return {
+            "avg_delay": statistics.mean(m.avg_delay for m in self.step_metrics),
+            "avg_total_cost": statistics.mean(m.total_cost for m in self.step_metrics),
+            "avg_migrations": statistics.mean(m.migration_count for m in self.step_metrics),
+            "avg_failed_allocations": statistics.mean(m.failed_allocations for m in self.step_metrics),
+            "avg_load_ratio": statistics.mean(m.avg_load_ratio for m in self.step_metrics),
+        }

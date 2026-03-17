@@ -1,33 +1,93 @@
-from src.env.environment import MECEnvironment
-from src.utils.metrics import compute_average_latency
+from __future__ import annotations
+
+from pathlib import Path
+import pandas as pd
+
+from src.algorithms.cost_aware import CostAwarePolicy
+from src.algorithms.nearest import NearestPolicy
+from src.algorithms.never_migrate import NeverMigratePolicy
+from src.algorithms.policy_params import PolicyParams
+from src.env.env_builder import build_environment
+from src.runners.simulation_runner import SimulationRunner
+from src.utils.config_loader import load_config
+from experiments.visualize_baseline import (
+    visualize_baseline_results,
+    visualize_step_curves,
+)
 
 
 def main() -> None:
-    env = MECEnvironment(
-        num_users=5,
-        num_servers=3,
-        area_size=100,
-        user_speed=3.0,
-        server_capacity=5,
-        seed=42,
-    )
+    env_config = load_config("config/env.yaml")
+    policy_config = load_config("config/policy.yaml")
+    experiment_config = load_config("config/experiment.yaml")
 
-    state = env.reset()
-    print("=== Initial State ===")
-    print(state)
-    print("Initial avg latency:", round(compute_average_latency(state), 4))
+    policy_params = PolicyParams.from_dict(policy_config)
+    steps = int(experiment_config.get("steps", 20))
 
-    for step in range(5):
-        state = env.step()
-        avg_latency = compute_average_latency(state)
-        print(f"\n=== Step {step + 1} ===")
-        print("Avg latency:", round(avg_latency, 4))
-        for user in state["users"]:
-            print(
-                f"User {user['user_id']} -> "
-                f"pos={user['position']} "
-                f"server={user['connected_server_id']}"
+    policies = {
+        "never_migrate": NeverMigratePolicy(),
+        "nearest": NearestPolicy(),
+        "cost_aware": CostAwarePolicy(policy_params),
+    }
+
+    summary_results = []
+    step_results = []
+
+    for name, policy in policies.items():
+        env = build_environment(env_config, policy_params)
+        runner = SimulationRunner(env, policy)
+        metrics = runner.run(steps)
+
+        summary = metrics.summary()
+        summary["Policy"] = name
+        summary_results.append(summary)
+
+        for step_idx, step_metric in enumerate(metrics.step_metrics, start=1):
+            step_results.append(
+                {
+                    "Policy": name,
+                    "step": step_idx,
+                    "avg_delay": step_metric.avg_delay,
+                    "avg_total_cost": step_metric.total_cost,
+                    "avg_migrations": step_metric.migration_count,
+                    "avg_failed_allocations": step_metric.failed_allocations,
+                    "avg_load_ratio": step_metric.avg_load_ratio,
+                }
             )
+
+        print(f"\nPolicy: {name}")
+        for k, v in summary.items():
+            if k != "Policy":
+                print(f"  {k}: {v:.4f}")
+
+    output_dir = Path("experiments/results")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    summary_csv = output_dir / "baseline_results.csv"
+    step_csv = output_dir / "baseline_step_results.csv"
+
+    summary_df = pd.DataFrame(summary_results)
+    summary_df = summary_df[
+        [
+            "Policy",
+            "avg_delay",
+            "avg_total_cost",
+            "avg_migrations",
+            "avg_failed_allocations",
+            "avg_load_ratio",
+        ]
+    ]
+    summary_df.to_csv(summary_csv, index=False, encoding="utf-8-sig")
+
+    step_df = pd.DataFrame(step_results)
+    step_df.to_csv(step_csv, index=False, encoding="utf-8-sig")
+
+    print(f"\n汇总结果已保存到: {summary_csv}")
+    print(f"逐步结果已保存到: {step_csv}")
+
+    figures_dir = output_dir / "figures"
+    visualize_baseline_results(summary_csv, figures_dir)
+    visualize_step_curves(step_csv, figures_dir)
 
 
 if __name__ == "__main__":
