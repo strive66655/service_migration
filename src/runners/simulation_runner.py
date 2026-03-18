@@ -27,30 +27,20 @@ class SimulationRunner:
 
             if target_node_id is None:
                 metrics.failed_allocations += 1
+                metrics.total_cost += self.env.params.allocation_failure_penalty
                 continue
 
             target_node = self.env.nodes[target_node_id]
 
             if not self.env.can_allocate(user, target_node):
                 metrics.failed_allocations += 1
+                metrics.total_cost += self.env.params.allocation_failure_penalty
                 continue
 
+            total_cost = self.env.assignment_cost(user, target_node, prev_node_id)
             self.env.allocate(user, target_node_id)
 
             delay = self.env.transmission_delay(user, target_node)
-            mig_cost = 0.0
-            if prev_node_id != target_node_id:
-                mig_cost = self.env.migration_cost(user, prev_node_id, target_node_id)
-
-            res_cost = self.env.resource_tension(user, target_node)
-            balance_cost = target_node.load_ratio
-
-            total_cost = (
-                self.env.params.lambda_delay * delay
-                + self.env.params.lambda_migration * mig_cost
-                + self.env.params.lambda_resource * res_cost
-                + self.env.params.lambda_balance * balance_cost
-            )
 
             if prev_node_id is not None and prev_node_id != target_node_id:
                 metrics.migration_count += 1
@@ -61,6 +51,7 @@ class SimulationRunner:
 
         metrics.avg_delay = statistics.mean(delay_list) if delay_list else 0.0
         metrics.avg_load_ratio = statistics.mean(node.load_ratio for node in self.env.nodes.values())
+        metrics.policy_debug = self.policy.debug_snapshot()
         return metrics
 
     def run(self, steps: int) -> SimulationMetrics:

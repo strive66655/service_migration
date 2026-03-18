@@ -1,3 +1,5 @@
 seed: 42
 steps: 80
-policy_name: cost_aware
+policy_name: all
+llm_refresh_interval: 1
+llm_retry_remote_every: 5

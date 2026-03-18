@@ -12,6 +12,7 @@ class StepMetrics:
     failed_allocations: int = 0
     total_cost: float = 0.0
     avg_load_ratio: float = 0.0
+    policy_debug: Dict[str, str | float | int] = field(default_factory=dict)
 
 
 @dataclass
