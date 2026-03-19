@@ -14,3 +14,6 @@ class BasePolicy(ABC):
 
     def debug_snapshot(self) -> dict:
         return {}
+
+    def observe_step_result(self, step_metrics: object) -> None:
+        return None

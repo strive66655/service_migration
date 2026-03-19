@@ -1,0 +1,29 @@
+"filename", "language", "Markdown", "YAML", "pip requirements", "Python", "CSV", "comment", "blank", "total"
+"f:\service_migration\README.md", "Markdown", 0, 0, 0, 0, 0, 0, 1, 1
+"f:\service_migration\config\env.yaml", "YAML", 0, 134, 0, 0, 0, 0, 3, 137
+"f:\service_migration\config\experiment.yaml", "YAML", 0, 3, 0, 0, 0, 0, 0, 3
+"f:\service_migration\config\policy.yaml", "YAML", 0, 15, 0, 0, 0, 6, 6, 27
+"f:\service_migration\experiments\results\baseline_results.csv", "CSV", 0, 0, 0, 0, 5, 0, 1, 6
+"f:\service_migration\experiments\results\baseline_step_results.csv", "CSV", 0, 0, 0, 0, 321, 0, 1, 322
+"f:\service_migration\experiments\run_experiment.py", "Python", 0, 0, 0, 77, 0, 0, 20, 97
+"f:\service_migration\experiments\visualize_baseline.py", "Python", 0, 0, 0, 89, 0, 0, 29, 118
+"f:\service_migration\requirements.txt", "pip requirements", 0, 0, 0, 0, 0, 0, 1, 1
+"f:\service_migration\src\__init__.py", "Python", 0, 0, 0, 0, 0, 0, 1, 1
+"f:\service_migration\src\algorithms\__init__.py", "Python", 0, 0, 0, 0, 0, 0, 1, 1
+"f:\service_migration\src\algorithms\base_policy.py", "Python", 0, 0, 0, 9, 0, 4, 4, 17
+"f:\service_migration\src\algorithms\cost_aware.py", "Python", 0, 0, 0, 75, 0, 0, 22, 97
+"f:\service_migration\src\algorithms\llm_policy.py", "Python", 0, 0, 0, 47, 0, 0, 9, 56
+"f:\service_migration\src\algorithms\nearest.py", "Python", 0, 0, 0, 11, 0, 0, 4, 15
+"f:\service_migration\src\algorithms\never_migrate.py", "Python", 0, 0, 0, 15, 0, 2, 5, 22
+"f:\service_migration\src\algorithms\policy_params.py", "Python", 0, 0, 0, 38, 0, 0, 8, 46
+"f:\service_migration\src\llm_core\__init__.py", "Python", 0, 0, 0, 0, 0, 0, 1, 1
+"f:\service_migration\src\llm_core\llm_client.py", "Python", 0, 0, 0, 131, 0, 5, 25, 161
+"f:\service_migration\src\llm_core\parser.py", "Python", 0, 0, 0, 30, 0, 0, 13, 43
+"f:\service_migration\src\llm_core\prompt_builder.py", "Python", 0, 0, 0, 53, 0, 0, 10, 63
+"f:\service_migration\src\runners\simulation_runner.py", "Python", 0, 0, 0, 44, 0, 0, 17, 61
+"f:\service_migration\src\utils\__init__.py", "Python", 0, 0, 0, 0, 0, 0, 1, 1
+"f:\service_migration\src\utils\config_loader.py", "Python", 0, 0, 0, 13, 0, 0, 6, 19
+"f:\service_migration\src\utils\logger.py", "Python", 0, 0, 0, 31, 0, 6, 12, 49
+"f:\service_migration\src\utils\metrics.py", "Python", 0, 0, 0, 24, 0, 0, 7, 31
+"f:\service_migration\src\utils\result_saver.py", "Python", 0, 0, 0, 25, 0, 1, 12, 38
+"Total", "-", 0, 152, 0, 712, 326, 24, 220, 1434

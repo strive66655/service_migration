@@ -50,8 +50,13 @@ class SimulationRunner:
             metrics.total_cost += total_cost
 
         metrics.avg_delay = statistics.mean(delay_list) if delay_list else 0.0
-        metrics.avg_load_ratio = statistics.mean(node.load_ratio for node in self.env.nodes.values())
+        node_loads = [node.load_ratio for node in self.env.nodes.values()]
+        metrics.avg_load_ratio = statistics.mean(node_loads) if node_loads else 0.0
+        metrics.max_load_ratio = max(node_loads) if node_loads else 0.0
+        metrics.min_load_ratio = min(node_loads) if node_loads else 0.0
+        metrics.load_std = statistics.pstdev(node_loads) if len(node_loads) > 1 else 0.0
         metrics.policy_debug = self.policy.debug_snapshot()
+        self.policy.observe_step_result(metrics)
         return metrics
 
     def run(self, steps: int) -> SimulationMetrics:

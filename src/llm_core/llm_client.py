@@ -6,6 +6,8 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict
 
+from src.llm_core.mode_selector import fallback_select_mode
+
 
 class BaseLLMClient:
     provider_name = "unknown"
@@ -34,58 +36,10 @@ class RuleBasedLLMClient(BaseLLMClient):
 
     def generate(self, prompt: str) -> str:
         state = self._extract_state(prompt)
-        base = state["base_policy_params"]
-
-        lambda_delay = float(base["lambda_delay"])
-        lambda_migration = float(base["lambda_migration"])
-        lambda_resource = float(base["lambda_resource"])
-        lambda_balance = float(base["lambda_balance"])
-        migrate_threshold = float(base["migrate_threshold"])
-        cooldown_steps = int(base["cooldown_steps"])
-
-        avg_speed = float(state.get("avg_speed", 0.0))
-        avg_latency = float(state.get("avg_latency_sensitivity", 0.0))
-        max_load = float(state.get("max_node_load_ratio", 0.0))
-        service_distribution = state.get("service_distribution", {})
-        intent_samples = " ".join(state.get("intent_samples", [])).lower()
-
-        ar_ratio = float(service_distribution.get("ar", 0)) / max(float(state.get("user_count", 1)), 1.0)
-        realtime_pressure = 0.5 * avg_latency + 0.3 * ar_ratio + 0.2 * min(avg_speed / 5.0, 1.0)
-
-        if realtime_pressure > 0.62:
-            lambda_delay += 0.06
-            lambda_migration -= 0.03
-            lambda_balance -= 0.01
-            migrate_threshold -= 0.02
-
-        if max_load > 0.55:
-            lambda_resource += 0.03
-            lambda_balance += 0.02
-            lambda_delay -= 0.03
-            migrate_threshold += 0.01
-
-        if "stable" in intent_samples or "avoid migration" in intent_samples:
-            lambda_migration += 0.06
-            lambda_delay -= 0.03
-            cooldown_steps += 1
-            migrate_threshold += 0.02
-
-        if "low latency" in intent_samples or "real-time" in intent_samples:
-            lambda_delay += 0.05
-            lambda_migration -= 0.03
-            cooldown_steps = max(1, cooldown_steps - 1)
-
+        mode, reason = fallback_select_mode(state)
         response = {
-            "lambda_delay": lambda_delay,
-            "lambda_migration": lambda_migration,
-            "lambda_resource": lambda_resource,
-            "lambda_balance": lambda_balance,
-            "migrate_threshold": migrate_threshold,
-            "cooldown_steps": cooldown_steps,
-            "rationale": (
-                "Adjusted policy weights from semantic state. "
-                f"realtime_pressure={realtime_pressure:.3f}, max_load={max_load:.3f}"
-            ),
+            "mode": mode,
+            "reason": reason,
         }
         return json.dumps(response, ensure_ascii=False)
 
@@ -128,6 +82,75 @@ class JsonHTTPClient(BaseLLMClient):
             raise RuntimeError(f"LLM API request failed: {exc}") from exc
 
 
+class OpenAICompatibleChatClient(JsonHTTPClient):
+    provider_name = "openai_compatible"
+    mode_name = "local"
+
+    def __init__(
+        self,
+        url: str,
+        model: str,
+        api_key: str = "local",
+        headers: Dict[str, str] | None = None,
+        timeout_seconds: float = 20.0,
+        provider_name: str = "openai_compatible",
+        mode_name: str = "local",
+    ) -> None:
+        super().__init__(
+            api_key=api_key,
+            url=url,
+            model=model,
+            headers=headers,
+            timeout_seconds=timeout_seconds,
+        )
+        self.provider_name = provider_name
+        self.mode_name = mode_name
+
+    def _extract_output_text(self, payload: Dict[str, Any]) -> str:
+        choices = payload.get("choices", [])
+        if not choices:
+            raise ValueError(f"No choices found in {self.provider_name} response.")
+
+        message = choices[0].get("message", {})
+        content = message.get("content", "")
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+
+        if isinstance(content, list):
+            text_parts: list[str] = []
+            for item in content:
+                if not isinstance(item, dict):
+                    continue
+                text = item.get("text", "")
+                if isinstance(text, str) and text.strip():
+                    text_parts.append(text.strip())
+            if text_parts:
+                return "\n".join(text_parts)
+
+        raise ValueError(f"No text content found in {self.provider_name} response.")
+
+    def generate(self, prompt: str) -> str:
+        body = {
+            "model": self.model,
+            "temperature": 0.2,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a service migration meta-controller. "
+                        "Return only JSON with keys mode and reason, with no markdown."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+        }
+        payload = self._post_json(body)
+        return self._extract_output_text(payload)
+
+
 class OpenAIResponsesClient(JsonHTTPClient):
     provider_name = "openai"
     mode_name = "remote"
@@ -168,7 +191,7 @@ class OpenAIResponsesClient(JsonHTTPClient):
                             "type": "input_text",
                             "text": (
                                 "You are a service migration meta-controller. "
-                                "Return only JSON with the requested keys and no markdown."
+                                "Return only JSON with keys mode and reason, with no markdown."
                             ),
                         }
                     ],
@@ -225,7 +248,7 @@ class OpenRouterChatClient(JsonHTTPClient):
                     "role": "system",
                     "content": (
                         "You are a service migration meta-controller. "
-                        "Return only JSON with the requested keys and no markdown."
+                        "Return only JSON with keys mode and reason, with no markdown."
                     ),
                 },
                 {
@@ -238,8 +261,48 @@ class OpenRouterChatClient(JsonHTTPClient):
         return self._extract_output_text(payload)
 
 
+class OllamaChatClient(OpenAICompatibleChatClient):
+    provider_name = "ollama"
+    mode_name = "local"
+
+    def __init__(self, model: str | None = None, timeout_seconds: float = 20.0) -> None:
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip().rstrip("/")
+        super().__init__(
+            url=f"{base_url}/v1/chat/completions",
+            model=model or os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct"),
+            api_key=os.getenv("OLLAMA_API_KEY", "ollama").strip() or "ollama",
+            timeout_seconds=timeout_seconds,
+            provider_name=self.provider_name,
+            mode_name=self.mode_name,
+        )
+
+
+class LocalOpenAICompatibleClient(OpenAICompatibleChatClient):
+    provider_name = "local"
+    mode_name = "local"
+
+    def __init__(self, timeout_seconds: float = 20.0) -> None:
+        base_url = os.getenv("LOCAL_LLM_BASE_URL", "http://127.0.0.1:8000/v1").strip().rstrip("/")
+        model = os.getenv("LOCAL_LLM_MODEL", "qwen2.5-7b-instruct")
+        api_key = os.getenv("LOCAL_LLM_API_KEY", "local").strip() or "local"
+        super().__init__(
+            url=f"{base_url}/chat/completions",
+            model=model,
+            api_key=api_key,
+            timeout_seconds=timeout_seconds,
+            provider_name=self.provider_name,
+            mode_name=self.mode_name,
+        )
+
+
 def build_llm_client() -> BaseLLMClient:
     provider = os.getenv("LLM_PROVIDER", "").strip().lower()
+
+    if provider == "local":
+        return LocalOpenAICompatibleClient()
+
+    if provider == "ollama":
+        return OllamaChatClient()
 
     if provider == "openrouter":
         api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
@@ -260,5 +323,13 @@ def build_llm_client() -> BaseLLMClient:
     openai_key = os.getenv("OPENAI_API_KEY", "").strip()
     if openai_key:
         return OpenAIResponsesClient(api_key=openai_key)
+
+    local_base_url = os.getenv("LOCAL_LLM_BASE_URL", "").strip()
+    if local_base_url:
+        return LocalOpenAICompatibleClient()
+
+    ollama_model = os.getenv("OLLAMA_MODEL", "").strip()
+    if ollama_model:
+        return OllamaChatClient()
 
     return RuleBasedLLMClient()

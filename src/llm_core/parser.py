@@ -4,11 +4,7 @@ import json
 import re
 from typing import Any, Dict
 
-from src.algorithms.policy_params import PolicyParams
-
-
-def _clamp(value: float, lower: float, upper: float) -> float:
-    return max(lower, min(upper, value))
+from src.llm_core.mode_selector import normalize_mode
 
 
 def _extract_fenced_json(response_text: str) -> str | None:
@@ -76,33 +72,9 @@ def _load_response_json(response_text: str) -> Dict[str, Any]:
     raise ValueError("Could not extract a valid JSON object from LLM response.")
 
 
-def parse_llm_response(response_text: str, base_params: PolicyParams) -> Dict[str, Any]:
+def parse_llm_response(response_text: str) -> Dict[str, Any]:
     data = _load_response_json(response_text)
-
-    weights = {
-        "lambda_delay": float(data.get("lambda_delay", base_params.lambda_delay)),
-        "lambda_migration": float(data.get("lambda_migration", base_params.lambda_migration)),
-        "lambda_resource": float(data.get("lambda_resource", base_params.lambda_resource)),
-        "lambda_balance": float(data.get("lambda_balance", base_params.lambda_balance)),
+    return {
+        "mode": normalize_mode(data.get("mode")),
+        "reason": str(data.get("reason", "")).strip(),
     }
-
-    for key, value in weights.items():
-        weights[key] = _clamp(value, 0.05, 0.8)
-
-    total_weight = sum(weights.values())
-    if total_weight <= 0:
-        raise ValueError("Invalid weight sum from LLM response.")
-
-    for key in weights:
-        weights[key] = weights[key] / total_weight
-
-    migrate_threshold = float(data.get("migrate_threshold", base_params.migrate_threshold))
-    cooldown_steps = int(data.get("cooldown_steps", base_params.cooldown_steps))
-
-    parsed = {
-        **weights,
-        "migrate_threshold": _clamp(migrate_threshold, 0.02, 0.25),
-        "cooldown_steps": int(_clamp(cooldown_steps, 1, 6)),
-        "rationale": str(data.get("rationale", "")).strip(),
-    }
-    return parsed
