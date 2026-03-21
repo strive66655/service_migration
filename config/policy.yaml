@@ -24,3 +24,9 @@ resource_tension_max: 4.0
 
 # allocation failure penalty
 allocation_failure_penalty: 80.0
+
+llm:
+  provider: qwen
+  model: qwen-max
+  update_interval: 5
+  temperature: 0.1

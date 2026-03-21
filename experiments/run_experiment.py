@@ -4,17 +4,48 @@ from pathlib import Path
 import pandas as pd
 
 from src.algorithms.cost_aware import CostAwarePolicy
+from src.algorithms.llm_policy import LLMCostAwarePolicy
 from src.algorithms.nearest import NearestPolicy
 from src.algorithms.never_migrate import NeverMigratePolicy
 from src.algorithms.policy_params import PolicyParams
 from src.env.env_builder import build_environment
 from src.runners.simulation_runner import SimulationRunner
 from src.utils.config_loader import load_config
+from src.llm.controller import LLMPolicyController
+from src.llm.providers.mock_provider import MockProvider
+from src.llm.providers.qwen_provider import QwenProvider
 from experiments.visualize_baseline import (
     visualize_baseline_results,
     visualize_step_curves,
 )
 
+def build_llm_policy(policy_params: PolicyParams, policy_config: dict):
+    llm_cfg = policy_config.get("llm", {})
+    provider_name = str(llm_cfg.get("provider", "mock")).lower()
+    model_name = str(llm_cfg.get("model", "mock-model"))
+    update_interval = int(llm_cfg.get("update_interval", 5))
+
+    if provider_name == "qwen":
+        provider = QwenProvider(
+            model_name=model_name,
+            temperature=float(llm_cfg.get("temperature", 0.1)),
+        )
+    else:
+        provider = MockProvider()
+        provider_name = "mock"
+
+    controller = LLMPolicyController(
+        provider=provider,
+        provider_name=provider_name,
+        model_name=model_name,
+        default_params=policy_params,
+    )
+
+    return LLMCostAwarePolicy(
+        default_params=policy_params,
+        controller=controller,
+        update_interval=update_interval,
+    )
 
 def main() -> None:
     env_config = load_config("config/env.yaml")
@@ -28,6 +59,7 @@ def main() -> None:
         "never_migrate": NeverMigratePolicy(),
         "nearest": NearestPolicy(),
         "cost_aware": CostAwarePolicy(policy_params),
+        "llm_cost_aware_qwen": build_llm_policy(policy_params, policy_config),
     }
 
     summary_results = []

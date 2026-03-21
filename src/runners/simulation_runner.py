@@ -25,6 +25,9 @@ class SimulationRunner:
             prev_node_id = user.current_node_id
             target_node_id = self.policy.select_node(self.env, user)
 
+            # 确保成本统计使用这次决策对应的实际参数
+            policy_params = getattr(self.policy, "current_params", self.env.params)
+
             if target_node_id is None:
                 metrics.failed_allocations += 1
                 continue
@@ -46,21 +49,27 @@ class SimulationRunner:
             balance_cost = target_node.load_ratio
 
             total_cost = (
-                self.env.params.lambda_delay * delay
-                + self.env.params.lambda_migration * mig_cost
-                + self.env.params.lambda_resource * res_cost
-                + self.env.params.lambda_balance * balance_cost
+                policy_params.lambda_delay * delay
+                + policy_params.lambda_migration * mig_cost
+                + policy_params.lambda_resource * res_cost
+                + policy_params.lambda_balance * balance_cost
             )
 
             if prev_node_id is not None and prev_node_id != target_node_id:
                 metrics.migration_count += 1
-                user.cooldown_left = self.env.params.cooldown_steps
+                user.cooldown_left = policy_params.cooldown_steps
 
             delay_list.append(delay)
             metrics.total_cost += total_cost
 
         metrics.avg_delay = statistics.mean(delay_list) if delay_list else 0.0
-        metrics.avg_load_ratio = statistics.mean(node.load_ratio for node in self.env.nodes.values())
+        metrics.avg_load_ratio = statistics.mean(
+            node.load_ratio for node in self.env.nodes.values()
+        )
+
+        if hasattr(self.policy, "record_step_metrics"):
+            self.policy.record_step_metrics(metrics)
+
         return metrics
 
     def run(self, steps: int) -> SimulationMetrics:
