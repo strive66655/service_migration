@@ -48,15 +48,30 @@ class LLMPolicyController:
             user_data["service_type"] for user_data in snapshot["users"].values()
         )
 
-        intent_texts = [
-            user_data["intent_text"].strip()
-            for user_data in snapshot["users"].values()
-            if user_data["intent_text"].strip()
-        ]
+        # intent_texts = [
+        #     user_data["intent_text"].strip()
+        #     for user_data in snapshot["users"].values()
+        #     if user_data["intent_text"].strip()
+        # ]
 
-        # HACK: 只是简单的把用户的 intent_text 拼起来，实际可以更智能地总结提炼
-        intent_summary = " | ".join(intent_texts[:5])
+        # # HACK: 只是简单的把用户的 intent_text 拼起来，实际可以更智能地总结提炼
+        # intent_summary = " | ".join(intent_texts[:5])
 
+        representative_intents = {}
+        for user_data in snapshot["users"].values():
+            service_type = user_data.get("service_type", "unknown")
+            intent_text = user_data.get("intent_text", "").strip()
+            if intent_text and service_type not in representative_intents:
+                representative_intents[service_type] = intent_text
+
+        if representative_intents:
+            intent_summary = " ; ".join(
+                f"{service}: {text}"
+                for service, text in representative_intents.items()
+            )
+        else:
+            intent_summary = "无显式用户意图文本"
+            
         failed_allocations_recent = sum(m.failed_allocations for m in recent_step_metrics[-3:])
         migrations_recent = sum(m.migration_count for m in recent_step_metrics[-3:])
 

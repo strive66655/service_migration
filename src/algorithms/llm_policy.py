@@ -28,7 +28,8 @@ class LLMCostAwarePolicy(BasePolicy):
 
         self.recent_metrics: Deque[StepMetrics] = deque(maxlen=history_size)
         self.last_refresh_step: int = -1
-        self.last_decision_mata: dict = {}
+        self.last_decision_meta: dict = {}
+        self.decision_history = []
 
     def record_step_metrics(self, metrics: StepMetrics) -> None:
         self.recent_metrics.append(metrics)
@@ -54,9 +55,18 @@ class LLMCostAwarePolicy(BasePolicy):
         self.inner_policy = CostAwarePolicy(self.current_params)
         self.last_refresh_step = current_step
         self.last_decision_meta = {
-            "reason": decision.reason,
+            "step": current_step,
             "provider": decision.provider,
             "model": decision.model,
             "used_fallback": decision.used_fallback,
+            "reason": decision.reason,
+            "lambda_delay": self.current_params.lambda_delay,
+            "lambda_migration": self.current_params.lambda_migration,
+            "lambda_resource": self.current_params.lambda_resource,
+            "lambda_balance": self.current_params.lambda_balance,
+            "migrate_threshold": self.current_params.migrate_threshold,
+            "cooldown_steps": self.current_params.cooldown_steps,
         }
+
+        self.decision_history.append(self.last_decision_meta.copy())
 

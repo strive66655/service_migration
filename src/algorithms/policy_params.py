@@ -1,30 +1,28 @@
 from dataclasses import asdict, dataclass
 from typing import Any, Dict
 
+
 @dataclass
 class PolicyParams:
-    # cost-aware 权重
     lambda_delay: float
     lambda_migration: float
     lambda_resource: float
     lambda_balance: float
 
-    # 冷却与候选节点
     migrate_threshold: float
     cooldown_steps: int
     max_candidates: int
     d_max: float
 
-    # transmission_delay 系数
     queue_penalty_coeff: float
     sensitivity_coeff: float
 
-    # migration_cost 系数
     migration_state_coeff: float
     migration_hops_coeff: float
+    migration_norm_factor: float
 
-    # resource_tension 上限
     resource_tension_max: float
+    allocation_failure_penalty: float
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> "PolicyParams":
@@ -41,9 +39,11 @@ class PolicyParams:
             sensitivity_coeff=float(config_dict["sensitivity_coeff"]),
             migration_state_coeff=float(config_dict["migration_state_coeff"]),
             migration_hops_coeff=float(config_dict["migration_hops_coeff"]),
+            migration_norm_factor=float(config_dict["migration_norm_factor"]),
             resource_tension_max=float(config_dict["resource_tension_max"]),
+            allocation_failure_penalty=float(config_dict["allocation_failure_penalty"]),
         )
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
@@ -51,7 +51,7 @@ class PolicyParams:
         merged = self.to_dict()
         merged.update(partial)
         return PolicyParams.from_dict(merged)
-    
+
     def normalized(self) -> "PolicyParams":
         weights = [
             max(0.0, float(self.lambda_delay)),
@@ -63,7 +63,7 @@ class PolicyParams:
         if total <= 1e-8:
             weights = [0.25, 0.25, 0.25, 0.25]
             total = 1.0
-        
+
         return PolicyParams(
             lambda_delay=weights[0] / total,
             lambda_migration=weights[1] / total,
@@ -77,5 +77,7 @@ class PolicyParams:
             sensitivity_coeff=max(float(self.sensitivity_coeff), 0.0),
             migration_state_coeff=max(float(self.migration_state_coeff), 0.0),
             migration_hops_coeff=max(float(self.migration_hops_coeff), 0.0),
+            migration_norm_factor=max(float(self.migration_norm_factor), 1e-6),
             resource_tension_max=max(float(self.resource_tension_max), 1e-6),
-        )    
+            allocation_failure_penalty=max(float(self.allocation_failure_penalty), 0.0),
+        )

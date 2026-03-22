@@ -1,0 +1,17 @@
+﻿Policy,step,provider,model,used_fallback,reason,lambda_delay,lambda_migration,lambda_resource,lambda_balance,migrate_threshold,cooldown_steps
+llm_cost_aware_qwen,1,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高时，适当提高 lambda_delay,0.28433268858800775,0.17408123791102514,0.3481624758220503,0.19342359767891684,0.03,2
+llm_cost_aware_qwen,6,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高，且资源紧张或失败分配较多。适当提高 lambda_delay 和 lambda_resource，并增大 migrate_threshold 和 cooldown_steps 来减少频繁迁移。,0.3,0.2,0.4,0.1,0.03,3
+llm_cost_aware_qwen,11,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高，且资源紧张或失败分配较多时，适当提高了 lambda_delay 和 lambda_resource 的值。,0.275797373358349,0.16885553470919326,0.36772983114446534,0.1876172607879925,0.03,2
+llm_cost_aware_qwen,16,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高，且资源紧张或失败分配较多。,0.3,0.2,0.4,0.1,0.03,3
+llm_cost_aware_qwen,21,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高，且资源紧张或失败分配较多时，适当提高了 lambda_delay 和 lambda_resource 的值。,0.275797373358349,0.16885553470919326,0.36772983114446534,0.1876172607879925,0.03,2
+llm_cost_aware_qwen,26,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高，且资源紧张或失败分配较多,0.275797373358349,0.16885553470919326,0.36772983114446534,0.1876172607879925,0.03,2
+llm_cost_aware_qwen,31,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高，且资源紧张或失败分配较多时，适当提高 lambda_delay 和 lambda_resource。,0.275797373358349,0.16885553470919326,0.36772983114446534,0.1876172607879925,0.03,2
+llm_cost_aware_qwen,36,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高，且资源紧张或失败分配较多，适当提高 lambda_delay 和 lambda_resource。同时迁移过于频繁，提高 lambda_migration 并增大 cooldown_steps。,0.3,0.2,0.4,0.1,0.03,5
+llm_cost_aware_qwen,41,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高，且资源紧张或失败分配较多。适当提高 lambda_delay 和 lambda_resource，并增大 cooldown_steps 以减少频繁迁移。,0.3,0.2,0.4,0.1,0.03,5
+llm_cost_aware_qwen,46,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高，且资源紧张或失败分配较多，适当提高 lambda_delay 和 lambda_resource。同时，为了减少频繁迁移，提高了 lambda_migration 并增大了 cooldown_steps。,0.3,0.2,0.4,0.1,0.03,5
+llm_cost_aware_qwen,51,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高，且资源紧张或失败分配较多，因此适当提高了 lambda_delay 和 lambda_resource。,0.275797373358349,0.16885553470919326,0.36772983114446534,0.1876172607879925,0.03,2
+llm_cost_aware_qwen,56,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高，且资源紧张或失败分配较多时，适当提高了 lambda_delay 和 lambda_resource。,0.275797373358349,0.16885553470919326,0.36772983114446534,0.1876172607879925,0.03,2
+llm_cost_aware_qwen,61,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高，且资源紧张或失败分配较多。,0.3,0.2,0.4,0.1,0.03,3
+llm_cost_aware_qwen,66,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高，且资源紧张或失败分配较多，因此提高了 lambda_delay 和 lambda_resource。同时，为了减少频繁迁移，略微增加了 lambda_migration 和 cooldown_steps。,0.3,0.2,0.4,0.1,0.03,3
+llm_cost_aware_qwen,71,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高，且资源紧张或失败分配较多时，适当提高 lambda_delay 和 lambda_resource。,0.275797373358349,0.16885553470919326,0.36772983114446534,0.1876172607879925,0.03,2
+llm_cost_aware_qwen,76,qwen,qwen-max,False,实时业务(如 AR、实时视频)占比高，且资源紧张或失败分配较多时，适当提高 lambda_delay 和 lambda_resource。同时，由于迁移次数不多，略微增加 migrate_threshold 和 cooldown_steps 来减少不必要的迁移。,0.3,0.2,0.4,0.1,0.03,3
