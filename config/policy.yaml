@@ -1,14 +1,14 @@
 # 候选范围与迁移控制
 d_max: 32.0
-migrate_threshold: 0.03
+migrate_threshold: 0.05
 cooldown_steps: 2
 max_candidates: 4
 
 # 多目标权重
-lambda_delay: 0.24489795918367346
-lambda_migration: 0.1836734693877551
-lambda_resource: 0.3673469387755102
-lambda_balance: 0.20408163265306123
+lambda_delay: 0.24
+lambda_migration: 0.18
+lambda_resource: 0.38
+lambda_balance: 0.20
 
 # transmission_delay 系数
 queue_penalty_coeff: 24.0
@@ -23,7 +23,7 @@ migration_norm_factor: 20.0
 resource_tension_max: 4.0
 
 # allocation failure penalty
-allocation_failure_penalty: 120.0
+allocation_failure_penalty: 50.0
 
 llm:
   provider: qwen

@@ -19,6 +19,8 @@ class QwenProvider(BaseLLMProvider):
 
         resolved_api_key = api_key or os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
         resolved_base_url = base_url or os.getenv("QWEN_BASE_URL") or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        # resolved_base_url = base_url or os.getenv("QWEN_BASE_URL") or "https://openrouter.ai/api/v1"
+
 
         if not resolved_api_key:
             raise ValueError("Qwen API key is not set. Please set DASHSCOPE_API_KEY or QWEN_API_KEY.")
