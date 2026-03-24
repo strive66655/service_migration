@@ -17,6 +17,7 @@ from src.algorithms.policy_params import PolicyParams
 from src.env.env_builder import build_environment
 from src.llm.controller import LLMPolicyController
 from src.llm.providers.mock_provider import MockProvider
+from src.llm.providers.openrouter_provider import OpenRouterProvider
 from src.llm.providers.qwen_provider import QwenProvider
 from src.runners.simulation_runner import SimulationRunner
 from src.utils.config_loader import load_config
@@ -40,6 +41,18 @@ def build_llm_policy(policy_params: PolicyParams, policy_config: dict) -> LLMCos
             provider = QwenProvider(
                 model_name=model_name,
                 temperature=float(llm_cfg.get("temperature", 0.1)),
+            )
+        except ValueError:
+            provider = MockProvider()
+            provider_name = "mock"
+            model_name = "mock-model"
+    elif provider_name == "openrouter":
+        try:
+            provider = OpenRouterProvider(
+                model_name=model_name,
+                temperature=float(llm_cfg.get("temperature", 0.1)),
+                site_url=llm_cfg.get("site_url"),
+                app_name=llm_cfg.get("app_name"),
             )
         except ValueError:
             provider = MockProvider()
@@ -81,7 +94,8 @@ def run_policy_suite(
         "cost_aware": lambda: CostAwarePolicy(policy_params),
     }
     if include_llm:
-        policies["llm_cost_aware_qwen"] = lambda: build_llm_policy(policy_params, policy_config)
+        llm_provider_name = str(policy_config.get("llm", {}).get("provider", "mock")).lower()
+        policies[f"llm_cost_aware_{llm_provider_name}"] = lambda: build_llm_policy(policy_params, policy_config)
 
     summary_results: list[dict] = []
     step_results: list[dict] = []
