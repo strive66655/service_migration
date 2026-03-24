@@ -14,7 +14,12 @@ class CostAwarePolicy(BasePolicy):
 
     def _assignment_cost(self, env: MECEnvironment, user: User, node_id: int) -> float:
         node = env.nodes[node_id]
-        return env.assignment_cost(user, node, user.current_node_id)
+        return env.assignment_cost(
+            user,
+            node,
+            user.current_node_id,
+            params=self.params,
+        )
 
     def select_node(self, env: MECEnvironment, user: User) -> Optional[int]:
         candidates = env.get_candidates(user)

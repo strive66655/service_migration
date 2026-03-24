@@ -64,7 +64,12 @@ class SimulationRunner:
                 )
                 continue
 
-            total_cost = self.env.assignment_cost(user, target_node, prev_node_id)
+            total_cost = self.env.assignment_cost(
+                user,
+                target_node,
+                prev_node_id,
+                params=policy_params,
+            )
             
             migration_happened = int(
                 prev_node_id is not None and prev_node_id != target_node_id
@@ -72,7 +77,7 @@ class SimulationRunner:
             if migration_happened:
                 user.migration_history.append(self.env.time_step)
 
-            delay = self.env.projected_transmission_delay(user, target_node)
+            delay = self.env.projected_transmission_delay(user, target_node, policy_params)
             qos_score = self.env.compute_qos_score(user, target_node, self.env.time_step)
             qos_satisfied = int(
                 self.env.check_qos_satisfaction(user, target_node, self.env.time_step)
@@ -89,13 +94,6 @@ class SimulationRunner:
             self.env.allocate(user, target_node_id)
 
             if migration_happened:
-                metrics.migration_count += 1
-                user.cooldown_left = policy_params.cooldown_steps
-
-            delay_list.append(delay)
-            metrics.total_cost += total_cost
-
-            if prev_node_id is not None and prev_node_id != target_node_id:
                 metrics.migration_count += 1
                 user.cooldown_left = policy_params.cooldown_steps
 

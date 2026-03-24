@@ -49,6 +49,7 @@ class LLMCostAwarePolicy(BasePolicy):
         
         decision = self.controller.suggest_params(
             env=env,
+            current_params=self.current_params,
             recent_step_metrics=list(self.recent_metrics),
         )
         self.current_params = decision.params

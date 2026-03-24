@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 import sys
@@ -30,7 +31,14 @@ if str(ROOT) not in sys.path:
 PolicyFactory = Callable[[], object]
 
 
-def build_llm_policy(policy_params: PolicyParams, policy_config: dict) -> LLMCostAwarePolicy:
+@dataclass(frozen=True)
+class BuiltLLMPolicy:
+    policy: LLMCostAwarePolicy
+    provider_name: str
+    model_name: str
+
+
+def build_llm_policy(policy_params: PolicyParams, policy_config: dict) -> BuiltLLMPolicy:
     llm_cfg = policy_config.get("llm", {})
     provider_name = str(llm_cfg.get("provider", "mock")).lower()
     model_name = str(llm_cfg.get("model", "mock-model"))
@@ -70,10 +78,14 @@ def build_llm_policy(policy_params: PolicyParams, policy_config: dict) -> LLMCos
         default_params=policy_params,
     )
 
-    return LLMCostAwarePolicy(
-        default_params=policy_params,
-        controller=controller,
-        update_interval=update_interval,
+    return BuiltLLMPolicy(
+        policy=LLMCostAwarePolicy(
+            default_params=policy_params,
+            controller=controller,
+            update_interval=update_interval,
+        ),
+        provider_name=provider_name,
+        model_name=model_name,
     )
 
 
@@ -93,9 +105,6 @@ def run_policy_suite(
         "nearest": lambda: NearestPolicy(),
         "cost_aware": lambda: CostAwarePolicy(policy_params),
     }
-    if include_llm:
-        llm_provider_name = str(policy_config.get("llm", {}).get("provider", "mock")).lower()
-        policies[f"llm_cost_aware_{llm_provider_name}"] = lambda: build_llm_policy(policy_params, policy_config)
 
     summary_results: list[dict] = []
     step_results: list[dict] = []
@@ -135,6 +144,44 @@ def run_policy_suite(
 
         if verbose:
             print(f"\nPolicy: {name}")
+            for key, value in summary.items():
+                if key != "Policy":
+                    print(f"  {key}: {value:.4f}")
+
+    if include_llm:
+        built_llm_policy = build_llm_policy(policy_params, policy_config)
+        llm_policy_name = f"llm_cost_aware_{built_llm_policy.provider_name}"
+        env = build_environment(env_config, policy_params, seed=seed)
+        runner = SimulationRunner(env, built_llm_policy.policy)
+        metrics = runner.run(steps)
+
+        summary = metrics.summary()
+        summary["Policy"] = llm_policy_name
+        summary_results.append(summary)
+
+        for step_idx, step_metric in enumerate(metrics.step_metrics, start=1):
+            step_results.append(
+                {
+                    "Policy": llm_policy_name,
+                    "step": step_idx,
+                    "avg_delay": step_metric.avg_delay,
+                    "avg_total_cost": step_metric.total_cost,
+                    "avg_migrations": step_metric.migration_count,
+                    "avg_failed_allocations": step_metric.failed_allocations,
+                    "avg_load_ratio": step_metric.avg_load_ratio,
+                }
+            )
+
+        for row in built_llm_policy.policy.decision_history:
+            llm_rows.append(
+                {
+                    "Policy": llm_policy_name,
+                    **row,
+                }
+            )
+
+        if verbose:
+            print(f"\nPolicy: {llm_policy_name}")
             for key, value in summary.items():
                 if key != "Policy":
                     print(f"  {key}: {value:.4f}")

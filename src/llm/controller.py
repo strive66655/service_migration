@@ -29,13 +29,15 @@ class LLMPolicyController:
     def suggest_params(
         self,
         env,
+        current_params: Optional[PolicyParams] = None,
         recent_step_metrics: Optional[List[StepMetrics]] = None,
     ) -> LLMDecision:
+        active_params = current_params or self.default_params
         scene = self._build_scene_summary(env, recent_step_metrics or [])
-        system_prompt, user_prompt = self.prompt_builder.build(scene, self.default_params)
+        system_prompt, user_prompt = self.prompt_builder.build(scene, active_params)
         raw_text =self.provider.generate(system_prompt, user_prompt)
 
-        return self.response_parser.parse(raw_text, self.default_params)
+        return self.response_parser.parse(raw_text, active_params)
 
     def _build_scene_summary(self, env, recent_step_metrics: List[StepMetrics]) -> SceneSummary:
         snapshot = env.snapshot()

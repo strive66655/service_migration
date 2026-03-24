@@ -68,7 +68,7 @@ class ResponseParser:
             "lambda_migration",
             "lambda_resource",
             "lambda_balance",
-            "migration_threshold",
+            "migrate_threshold",
         ]
         int_fields = ["cooldown_steps"]
 

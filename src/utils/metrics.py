@@ -1,5 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Dict, List
 import statistics
@@ -17,6 +18,16 @@ class StepMetrics:
 @dataclass
 class SimulationMetrics:
     step_metrics: List[StepMetrics] = field(default_factory=list)
+
+    @staticmethod
+    def _nearest_rank_percentile(values: List[float], percentile: float) -> float:
+        if not values:
+            raise ValueError("values must not be empty")
+
+        sorted_values = sorted(values)
+        rank = max(1, math.ceil(percentile * len(sorted_values)))
+        idx = min(len(sorted_values) - 1, rank - 1)
+        return sorted_values[idx]
 
     def summary(self) -> Dict[str, float]:
         if not self.step_metrics:
@@ -36,7 +47,7 @@ class SimulationMetrics:
 
         if not qos_records:
             return result
-        
+
         result["avg_qos_score"] = statistics.mean(r["qos_score"] for r in qos_records)
         result["intent_satisfaction_rate"] = statistics.mean(r["qos_satisfied"] for r in qos_records)
         result["sla_violation_rate"] = statistics.mean(r["sla_violated"] for r in qos_records)
@@ -55,14 +66,12 @@ class SimulationMetrics:
             delays = [r["delay"] for r in subset if r["delay"] is not None]
             if delays:
                 result[f"{service_type}_avg_delay"] = statistics.mean(delays)
-                delays_sorted = sorted(delays)
-                idx = min(len(delays_sorted) - 1, int(0.95 * len(delays_sorted)))
-                result[f"{service_type}_p95_delay"] = delays_sorted[idx]
+                result[f"{service_type}_p95_delay"] = self._nearest_rank_percentile(
+                    delays,
+                    0.95,
+                )
             else:
                 result[f"{service_type}_avg_delay"] = 0.0
                 result[f"{service_type}_p95_delay"] = 0.0
 
         return result
-
-
-
