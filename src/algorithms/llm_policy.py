@@ -34,8 +34,10 @@ class LLMCostAwarePolicy(BasePolicy):
     def record_step_metrics(self, metrics: StepMetrics) -> None:
         self.recent_metrics.append(metrics)
 
-    def select_node(self, env: MECEnvironment, user: User) -> Optional[int]:
+    def before_step(self, env: MECEnvironment) -> None:
         self._maybe_refresh(env)
+
+    def select_node(self, env: MECEnvironment, user: User) -> Optional[int]:
         return self.inner_policy.select_node(env, user)
     
     def _maybe_refresh(self, env: MECEnvironment) -> None:

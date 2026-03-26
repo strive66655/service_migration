@@ -16,6 +16,8 @@ class SimulationRunner:
     def step(self) -> StepMetrics:
         self.env.time_step += 1
         self.env.move_users()
+        if hasattr(self.policy, "before_step"):
+            self.policy.before_step(self.env)
         self.env.reset()
 
         metrics = StepMetrics()

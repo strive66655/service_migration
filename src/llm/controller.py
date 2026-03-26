@@ -35,7 +35,18 @@ class LLMPolicyController:
         active_params = current_params or self.default_params
         scene = self._build_scene_summary(env, recent_step_metrics or [])
         system_prompt, user_prompt = self.prompt_builder.build(scene, active_params)
-        raw_text =self.provider.generate(system_prompt, user_prompt)
+        try:
+            raw_text = self.provider.generate(system_prompt, user_prompt)
+        except Exception as exc:
+            return LLMDecision(
+                params=active_params.normalized(),
+                reason=f"LLM provider call failed, using current parameters. Error: {exc}",
+                provider=self.provider_name,
+                model=self.model_name,
+                used_fallback=True,
+                raw_text="",
+                parsed_payload={},
+            )
 
         return self.response_parser.parse(raw_text, active_params)
 
@@ -49,15 +60,6 @@ class LLMPolicyController:
         service_counter = Counter(
             user_data["service_type"] for user_data in snapshot["users"].values()
         )
-
-        # intent_texts = [
-        #     user_data["intent_text"].strip()
-        #     for user_data in snapshot["users"].values()
-        #     if user_data["intent_text"].strip()
-        # ]
-
-        # # HACK: 只是简单的把用户的 intent_text 拼起来，实际可以更智能地总结提炼
-        # intent_summary = " | ".join(intent_texts[:5])
 
         representative_intents = {}
         for user_data in snapshot["users"].values():
@@ -74,8 +76,33 @@ class LLMPolicyController:
         else:
             intent_summary = "无显式用户意图文本"
             
-        failed_allocations_recent = sum(m.failed_allocations for m in recent_step_metrics[-3:])
-        migrations_recent = sum(m.migration_count for m in recent_step_metrics[-3:])
+        window_metrics = recent_step_metrics
+        window_steps = len(window_metrics)
+
+        user_count = len(snapshot["users"])
+        safe_user_count = max(user_count, 1)
+        safe_denominator = max(window_steps * safe_user_count, 1)
+
+        failed_allocations_recent = sum(m.failed_allocations for m in window_metrics)
+        migrations_recent = sum(m.migration_count for m in window_metrics)
+
+        avg_delay_recent = (
+            sum(m.avg_delay for m in window_metrics) / window_steps
+            if window_steps > 0
+            else 0.0
+        )
+
+        migration_rate_recent = migrations_recent / safe_denominator
+        failed_allocation_rate_recent = failed_allocations_recent / safe_denominator
+
+        users_in_cooldown = sum(
+            1
+            for user_data in snapshot["users"].values()
+            if int(user_data.get("cooldown_left", 0)) > 0
+        )
+        users_in_cooldown_ratio = users_in_cooldown / safe_user_count
+
+        avg_migrations_per_user_recent = migrations_recent / safe_user_count
 
         return SceneSummary(
             step=int(snapshot["time_step"]),
@@ -85,6 +112,11 @@ class LLMPolicyController:
             max_node_load=float(max_node_load),
             failed_allocations_recent=int(failed_allocations_recent),
             migrations_recent=int(migrations_recent),
+            avg_delay_recent=float(avg_delay_recent),
+            migration_rate_recent=float(migration_rate_recent),
+            failed_allocation_rate_recent=float(failed_allocation_rate_recent),
+            users_in_cooldown_ratio=float(users_in_cooldown_ratio),
+            avg_migrations_per_user_recent=float(avg_migrations_per_user_recent),
             service_counts=dict(service_counter),
             intent_summary=intent_summary,
             snapshot=snapshot,

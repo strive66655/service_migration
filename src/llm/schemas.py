@@ -25,6 +25,11 @@ class SceneSummary:
     max_node_load: float
     failed_allocations_recent: int 
     migrations_recent: int
+    avg_delay_recent: float
+    migration_rate_recent: float
+    failed_allocation_rate_recent: float
+    users_in_cooldown_ratio: float
+    avg_migrations_per_user_recent: float
     service_counts: Dict[str, int]
     intent_summary: str
     snapshot: Dict[str, Any]
