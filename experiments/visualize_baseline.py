@@ -1,49 +1,250 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import pandas as pd
 
 
-DISPLAY_NAMES = {
-    "never_migrate": "Never",
-    "nearest": "Nearest",
-    "cost_aware": "Cost-aware",
-    "llm_policy": "LLM+Solver",
+CORE_METRICS = [
+    ("avg_total_cost", "Average Total Cost", True),
+    ("avg_delay", "Average Delay", True),
+    ("avg_failed_allocations", "Failed Allocations", True),
+]
+QOS_CORE_METRICS = [
+    ("avg_qos_score", "Average QoS Score", False),
+    ("intent_satisfaction_rate", "Intent Satisfaction Rate", False),
+    ("sla_violation_rate", "SLA Violation Rate", True),
+]
+QOS_TREND_METRICS = [
+    ("avg_qos_score", "Average QoS Score"),
+    ("intent_satisfaction_rate", "Intent Satisfaction Rate"),
+    ("sla_violation_rate", "SLA Violation Rate"),
+]
+
+POLICY_COLORS = {
+    "never_migrate": "#C44E52",
+    "nearest": "#4C72B0",
+    "cost_aware": "#55A868",
+    "llm_cost_aware_openrouter": "#DD6B20",
+    "llm_cost_aware_mock": "#DD6B20",
 }
 
-CORE_METRICS = [
-    ("avg_delay", "Average Delay"),
-    ("avg_total_cost", "Average Total Cost"),
-    ("avg_migrations", "Average Migrations"),
-    ("avg_failed_allocations", "Failed Allocations"),
+LEGACY_FIGURES = [
+    "avg_delay.png",
+    "avg_total_cost.png",
+    "avg_migrations.png",
+    "avg_failed_allocations.png",
+    "avg_load_ratio.png",
+    "baseline_comparison_normalized.png",
+    "avg_delay_curve.png",
+    "avg_total_cost_curve.png",
+    "avg_migrations_curve.png",
+    "avg_failed_allocations_curve.png",
+    "avg_load_ratio_curve.png",
 ]
 
-TIME_SERIES_METRICS = [
-    ("avg_total_cost", "Average Total Cost over Time"),
-    ("avg_delay", "Average Delay over Time"),
-]
 
-LLM_PARAM_METRICS = [
-    ("llm_lambda_delay", "Lambda Delay"),
-    ("llm_lambda_migration", "Lambda Migration"),
-    ("llm_lambda_resource", "Lambda Resource"),
-    ("llm_lambda_balance", "Lambda Balance"),
-]
+def _setup_matplotlib_style() -> None:
+    plt.style.use("seaborn-v0_8-whitegrid")
+    plt.rcParams.update(
+        {
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "axes.edgecolor": "#D0D5DD",
+            "axes.labelcolor": "#344054",
+            "axes.titleweight": "semibold",
+            "axes.titlecolor": "#101828",
+            "axes.facecolor": "#FCFCFD",
+            "figure.facecolor": "#FFFFFF",
+            "grid.color": "#E4E7EC",
+            "grid.alpha": 0.8,
+            "grid.linestyle": "--",
+            "grid.linewidth": 0.8,
+            "xtick.color": "#475467",
+            "ytick.color": "#475467",
+            "font.size": 10,
+            "axes.labelsize": 10,
+            "axes.titlesize": 12,
+            "legend.fontsize": 9,
+        }
+    )
 
-COLORS = ["#4C72B0", "#DD8452", "#55A868", "#C44E52"]
+
+def _policy_color(policy: str) -> str:
+    if policy.startswith("llm_cost_aware_"):
+        return "#DD6B20"
+    return POLICY_COLORS.get(policy, "#667085")
 
 
-def _prepare_policy_labels(df: pd.DataFrame) -> pd.DataFrame:
-    plot_df = df.copy()
-    plot_df["PolicyLabel"] = plot_df["Policy"].map(DISPLAY_NAMES).fillna(plot_df["Policy"])
-    return plot_df
+def _format_value(metric: str, value: float) -> str:
+    if metric in {"avg_failed_allocations", "avg_migrations"}:
+        return f"{value:.0f}" if float(value).is_integer() else f"{value:.2f}"
+    if "rate" in metric or "score" in metric:
+        return f"{value:.3f}"
+    return f"{value:.2f}"
+
+
+def _clean_output_dir(output_path: Path) -> None:
+    for filename in LEGACY_FIGURES + [
+        "baseline_overview.png",
+        "cost_trend.png",
+        "qos_overview.png",
+        "qos_trend.png",
+    ]:
+        file_path = output_path / filename
+        if file_path.exists():
+            file_path.unlink()
+
+
+def _draw_metric_bar(
+    ax: plt.Axes,
+    df: pd.DataFrame,
+    metric: str,
+    title: str,
+    ascending: bool = True,
+) -> None:
+    metric_df = df[["Policy", metric]].sort_values(metric, ascending=ascending)
+    colors = [_policy_color(policy) for policy in metric_df["Policy"]]
+    bars = ax.barh(metric_df["Policy"], metric_df[metric], color=colors, height=0.58)
+
+    ax.set_title(title, loc="left", pad=10)
+    ax.set_xlabel(title)
+    ax.set_ylabel("")
+    ax.xaxis.grid(True)
+    ax.yaxis.grid(False)
+    ax.set_axisbelow(True)
+    ax.invert_yaxis()
+
+    max_val = float(metric_df[metric].max()) if not metric_df.empty else 0.0
+    label_offset = max(max_val * 0.02, 0.02)
+
+    for bar, value in zip(bars, metric_df[metric]):
+        ax.text(
+            bar.get_width() + label_offset,
+            bar.get_y() + bar.get_height() / 2,
+            _format_value(metric, float(value)),
+            va="center",
+            ha="left",
+            color="#344054",
+            fontsize=9,
+        )
+
+    right_limit = max_val + label_offset * 6 if max_val > 0 else 1.0
+    ax.set_xlim(0, right_limit)
+
+
+def _spread_end_labels(values: list[float], min_gap: float) -> list[float]:
+    if not values:
+        return []
+
+    adjusted = sorted(enumerate(values), key=lambda item: item[1])
+    output = [0.0] * len(values)
+    prev_y: float | None = None
+
+    for index, value in adjusted:
+        target = value if prev_y is None else max(value, prev_y + min_gap)
+        output[index] = target
+        prev_y = target
+
+    return output
+
+
+def _extract_service_metrics(df: pd.DataFrame, suffix: str) -> list[str]:
+    services = []
+    for column in df.columns:
+        if column.endswith(suffix):
+            services.append(column[: -len(suffix)])
+    return sorted(services)
+
+
+def _draw_service_grouped_bars(
+    ax: plt.Axes,
+    df: pd.DataFrame,
+    suffix: str,
+    title: str,
+    ylabel: str,
+) -> None:
+    services = _extract_service_metrics(df, suffix)
+    if not services:
+        ax.set_visible(False)
+        return
+
+    policies = list(df["Policy"])
+    x_positions = list(range(len(services)))
+    width = 0.8 / max(len(policies), 1)
+
+    for idx, policy in enumerate(policies):
+        offsets = [x + (idx - (len(policies) - 1) / 2) * width for x in x_positions]
+        values = [
+            float(df.loc[df["Policy"] == policy, f"{service}{suffix}"].iloc[0])
+            if f"{service}{suffix}" in df.columns
+            else 0.0
+            for service in services
+        ]
+        ax.bar(
+            offsets,
+            values,
+            width=width,
+            color=_policy_color(policy),
+            label=policy,
+            alpha=0.9,
+        )
+
+    ax.set_title(title, loc="left", pad=10)
+    ax.set_ylabel(ylabel)
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(services)
+    ax.grid(True, axis="y")
+    ax.grid(False, axis="x")
+
+
+def _plot_labeled_trend(ax: plt.Axes, df: pd.DataFrame, metric: str, title: str) -> None:
+    policy_frames: list[tuple[str, float, float, str]] = []
+
+    for policy in df["Policy"].unique():
+        sub_df = df[df["Policy"] == policy].sort_values("step")
+        color = _policy_color(policy)
+        ax.plot(
+            sub_df["step"],
+            sub_df[metric],
+            linewidth=2.3,
+            color=color,
+            label=policy,
+        )
+
+        last_row = sub_df.iloc[-1]
+        policy_frames.append(
+            (
+                policy,
+                float(last_row["step"]),
+                float(last_row[metric]),
+                color,
+            )
+        )
+
+    y_values = [frame[2] for frame in policy_frames]
+    y_span = max(y_values) - min(y_values) if len(y_values) > 1 else 0.0
+    min_gap = max(y_span * 0.08, 0.04)
+    adjusted_y = _spread_end_labels(y_values, min_gap)
+
+    for (policy, step_value, _, color), label_y in zip(policy_frames, adjusted_y):
+        ax.text(step_value + 0.4, label_y, policy, color=color, va="center", fontsize=9)
+
+    ax.set_title(title, loc="left", pad=10)
+    ax.set_xlabel("Step")
+    ax.grid(True, axis="y")
+    ax.grid(False, axis="x")
+    ax.margins(x=0.1)
+
+    y_min, y_max = ax.get_ylim()
+    if adjusted_y:
+        ax.set_ylim(y_min, max(y_max, max(adjusted_y) + min_gap * 0.35))
 
 
 def visualize_baseline_results(
-    csv_file: str | Path,
-    output_dir: str | Path = "experiments/results/figures",
+    csv_file: str | Path, output_dir: str | Path = "experiments/results/figures"
 ) -> None:
     csv_path = Path(csv_file)
     output_path = Path(output_dir)
@@ -52,112 +253,84 @@ def visualize_baseline_results(
     if not csv_path.exists():
         raise FileNotFoundError(f"CSV file not found: {csv_path}")
 
-    df = _prepare_policy_labels(pd.read_csv(csv_path))
+    _setup_matplotlib_style()
+    _clean_output_dir(output_path)
 
-    available_metrics = [(col, title) for col, title in CORE_METRICS if col in df.columns]
-    if not available_metrics:
-        raise ValueError("No supported metrics found in baseline results.")
+    df = pd.read_csv(csv_path)
 
-    fig, axes = plt.subplots(2, 2, figsize=(10, 7))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 8.5))
     axes = axes.flatten()
 
-    for ax, (col, title) in zip(axes, available_metrics):
-        ax.bar(df["PolicyLabel"], df[col], color=COLORS[: len(df)], width=0.6)
-        ax.set_title(title, fontsize=11)
-        ax.set_xlabel("Policy")
-        ax.set_ylabel(title)
-        ax.grid(axis="y", linestyle="--", alpha=0.25)
+    for axis, (metric, title, ascending) in zip(axes[:3], CORE_METRICS):
+        _draw_metric_bar(axis, df, metric, title, ascending=ascending)
 
-    for ax in axes[len(available_metrics) :]:
-        ax.axis("off")
+    norm_df = df.copy()
+    for metric, _, _ in CORE_METRICS:
+        max_val = norm_df[metric].max()
+        norm_df[metric] = norm_df[metric] / max_val if max_val > 0 else 0.0
 
-    fig.suptitle("Baseline Policy Comparison", fontsize=14)
-    fig.tight_layout()
-    fig.savefig(output_path / "baseline_policy_comparison.png", dpi=180, bbox_inches="tight")
+    norm_df = norm_df.sort_values("avg_total_cost", ascending=True)
+    x_positions = list(range(len(norm_df)))
+    width = 0.22
+    hatches = ["", "//", "xx"]
+
+    comparison_ax = axes[3]
+    for idx, (metric, title, _) in enumerate(CORE_METRICS):
+        offsets = [x + (idx - 1) * width for x in x_positions]
+        comparison_ax.bar(
+            offsets,
+            norm_df[metric],
+            width=width,
+            color=[_policy_color(policy) for policy in norm_df["Policy"]],
+            alpha=0.9,
+            edgecolor="#FFFFFF",
+            linewidth=0.6,
+            hatch=hatches[idx],
+        )
+
+    comparison_ax.set_title("Normalized Core Metrics", loc="left", pad=10)
+    comparison_ax.set_ylabel("Relative value")
+    comparison_ax.set_xlabel("Policy")
+    comparison_ax.set_xticks(x_positions)
+    comparison_ax.set_xticklabels(norm_df["Policy"])
+    comparison_ax.set_ylim(0, 1.12)
+    comparison_ax.yaxis.grid(True)
+    comparison_ax.xaxis.grid(False)
+
+    metric_handles = [
+        Patch(facecolor="#D0D5DD", edgecolor="#98A2B3", hatch=hatches[idx], label=title)
+        for idx, (_, title, _) in enumerate(CORE_METRICS)
+    ]
+    policy_handles = [
+        Patch(facecolor=_policy_color(policy), edgecolor="none", label=policy)
+        for policy in norm_df["Policy"]
+    ]
+
+    fig.suptitle("Baseline Policy Overview", fontsize=15, fontweight="semibold", y=0.98)
+    fig.legend(
+        handles=metric_handles,
+        loc="lower center",
+        bbox_to_anchor=(0.35, 0.01),
+        ncol=len(metric_handles),
+        frameon=False,
+    )
+    fig.legend(
+        handles=policy_handles,
+        loc="lower center",
+        bbox_to_anchor=(0.8, 0.01),
+        ncol=len(policy_handles),
+        frameon=False,
+        title="Policy",
+    )
+    fig.tight_layout(rect=(0, 0.1, 1, 0.96), w_pad=2.4, h_pad=2.2)
+    fig.savefig(output_path / "baseline_overview.png", dpi=180, bbox_inches="tight")
     plt.close(fig)
 
-    print(f"Saved summary figure to {output_path}")
-
-
-def _plot_standard_curves(df: pd.DataFrame, output_path: Path) -> None:
-    policies = list(df["PolicyLabel"].drop_duplicates())
-
-    for col, title in TIME_SERIES_METRICS:
-        if col not in df.columns:
-            continue
-
-        plt.figure(figsize=(8.2, 4.8))
-        for idx, policy in enumerate(policies):
-            sub_df = df[df["PolicyLabel"] == policy].sort_values("step")
-            plt.plot(
-                sub_df["step"],
-                sub_df[col],
-                linewidth=2.2,
-                label=policy,
-                color=COLORS[idx % len(COLORS)],
-            )
-
-        plt.title(title)
-        plt.xlabel("Step")
-        plt.ylabel(title.replace(" over Time", ""))
-        plt.legend(frameon=False)
-        plt.grid(True, linestyle="--", alpha=0.25)
-        plt.tight_layout()
-        plt.savefig(output_path / f"{col}_curve.png", dpi=180, bbox_inches="tight")
-        plt.close()
-
-
-def _plot_llm_parameter_curves(df: pd.DataFrame, output_path: Path) -> None:
-    llm_df = df[df["Policy"] == "llm_policy"].sort_values("step")
-    if llm_df.empty:
-        return
-
-    available_metrics = [(col, title) for col, title in LLM_PARAM_METRICS if col in llm_df.columns]
-    if not available_metrics:
-        return
-
-    fig, axes = plt.subplots(2, 2, figsize=(10, 7))
-    axes = axes.flatten()
-
-    for ax, (col, title) in zip(axes, available_metrics):
-        ax.plot(llm_df["step"], llm_df[col], linewidth=2.2, color="#C44E52")
-        ax.set_title(title, fontsize=11)
-        ax.set_xlabel("Step")
-        ax.set_ylabel(title)
-        ax.grid(True, linestyle="--", alpha=0.25)
-
-    for ax in axes[len(available_metrics) :]:
-        ax.axis("off")
-
-    fig.suptitle("LLM Dynamic Parameter Curves", fontsize=14)
-    fig.tight_layout()
-    fig.savefig(output_path / "llm_parameter_curves.png", dpi=180, bbox_inches="tight")
-    plt.close(fig)
-
-
-def _plot_llm_mode_distribution(df: pd.DataFrame, output_path: Path) -> None:
-    llm_df = df[df["Policy"] == "llm_policy"].copy()
-    if llm_df.empty or "llm_mode" not in llm_df.columns:
-        return
-
-    mode_counts = llm_df["llm_mode"].fillna("unknown").value_counts()
-    if mode_counts.empty:
-        return
-
-    plt.figure(figsize=(6.6, 4.6))
-    plt.bar(mode_counts.index.astype(str), mode_counts.values, color=["#4C72B0", "#C44E52", "#55A868"])
-    plt.title("LLM Mode Distribution")
-    plt.xlabel("Mode")
-    plt.ylabel("Step Count")
-    plt.grid(axis="y", linestyle="--", alpha=0.25)
-    plt.tight_layout()
-    plt.savefig(output_path / "llm_mode_distribution.png", dpi=180, bbox_inches="tight")
-    plt.close()
+    print(f"Saved overview figure to: {output_path / 'baseline_overview.png'}")
 
 
 def visualize_step_curves(
-    step_csv_file: str | Path,
-    output_dir: str | Path = "experiments/results/figures",
+    step_csv_file: str | Path, output_dir: str | Path = "experiments/results/figures"
 ) -> None:
     step_csv_path = Path(step_csv_file)
     output_path = Path(output_dir)
@@ -166,15 +339,106 @@ def visualize_step_curves(
     if not step_csv_path.exists():
         raise FileNotFoundError(f"Step CSV file not found: {step_csv_path}")
 
-    df = _prepare_policy_labels(pd.read_csv(step_csv_path))
+    _setup_matplotlib_style()
 
-    _plot_standard_curves(df, output_path)
-    _plot_llm_parameter_curves(df, output_path)
-    _plot_llm_mode_distribution(df, output_path)
+    df = pd.read_csv(step_csv_path)
+    fig, ax = plt.subplots(figsize=(10.5, 5.2))
+    _plot_labeled_trend(ax, df, "avg_total_cost", "Average Total Cost over Time")
+    ax.set_ylabel("Average Total Cost")
 
-    print(f"Saved time-series figures to {output_path}")
+    fig.tight_layout()
+    fig.savefig(output_path / "cost_trend.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+    print(f"Saved trend figure to: {output_path / 'cost_trend.png'}")
+
+
+def visualize_qos_summary(
+    csv_file: str | Path, output_dir: str | Path = "experiments/results/figures"
+) -> None:
+    csv_path = Path(csv_file)
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    if not csv_path.exists():
+        raise FileNotFoundError(f"CSV file not found: {csv_path}")
+
+    _setup_matplotlib_style()
+    df = pd.read_csv(csv_path)
+    if df.empty:
+        return
+
+    fig, axes = plt.subplots(2, 3, figsize=(16, 9))
+    axes = axes.flatten()
+
+    for axis, (metric, title, ascending) in zip(axes[:3], QOS_CORE_METRICS):
+        _draw_metric_bar(axis, df, metric, title, ascending=ascending)
+
+    _draw_service_grouped_bars(
+        axes[3],
+        df,
+        "_intent_satisfaction_rate",
+        "Service Intent Satisfaction",
+        "Rate",
+    )
+    _draw_service_grouped_bars(
+        axes[4],
+        df,
+        "_sla_violated_rate",
+        "Service SLA Violation",
+        "Rate",
+    )
+    _draw_service_grouped_bars(
+        axes[5],
+        df,
+        "_p95_delay",
+        "Service P95 Delay",
+        "Delay",
+    )
+
+    handles = [
+        Patch(facecolor=_policy_color(policy), edgecolor="none", label=policy)
+        for policy in df["Policy"]
+    ]
+    fig.suptitle("QoS Comparison Overview", fontsize=15, fontweight="semibold", y=0.98)
+    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.01), ncol=len(handles), frameon=False)
+    fig.tight_layout(rect=(0, 0.06, 1, 0.96), w_pad=2.0, h_pad=2.2)
+    fig.savefig(output_path / "qos_overview.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+    print(f"Saved QoS overview figure to: {output_path / 'qos_overview.png'}")
+
+
+def visualize_qos_step_curves(
+    step_csv_file: str | Path, output_dir: str | Path = "experiments/results/figures"
+) -> None:
+    step_csv_path = Path(step_csv_file)
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    if not step_csv_path.exists():
+        raise FileNotFoundError(f"Step CSV file not found: {step_csv_path}")
+
+    _setup_matplotlib_style()
+    df = pd.read_csv(step_csv_path)
+    if df.empty:
+        return
+
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.8))
+
+    for axis, (metric, title) in zip(axes, QOS_TREND_METRICS):
+        _plot_labeled_trend(axis, df, metric, title)
+        axis.set_ylabel(title)
+
+    fig.tight_layout()
+    fig.savefig(output_path / "qos_trend.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+    print(f"Saved QoS trend figure to: {output_path / 'qos_trend.png'}")
 
 
 if __name__ == "__main__":
     visualize_baseline_results("experiments/results/baseline_results.csv")
     visualize_step_curves("experiments/results/baseline_step_results.csv")
+    visualize_qos_summary("experiments/results/qos_results.csv")
+    visualize_qos_step_curves("experiments/results/qos_step_results.csv")

@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any, Dict
 
 
@@ -42,4 +42,42 @@ class PolicyParams:
             migration_norm_factor=float(config_dict["migration_norm_factor"]),
             resource_tension_max=float(config_dict["resource_tension_max"]),
             allocation_failure_penalty=float(config_dict["allocation_failure_penalty"]),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    def merged_with(self, partial: Dict[str, Any]) -> "PolicyParams":
+        merged = self.to_dict()
+        merged.update(partial)
+        return PolicyParams.from_dict(merged)
+
+    def normalized(self) -> "PolicyParams":
+        weights = [
+            max(0.0, float(self.lambda_delay)),
+            max(0.0, float(self.lambda_migration)),
+            max(0.0, float(self.lambda_resource)),
+            max(0.0, float(self.lambda_balance)),
+        ]
+        total = sum(weights)
+        if total <= 1e-8:
+            weights = [0.25, 0.25, 0.25, 0.25]
+            total = 1.0
+
+        return PolicyParams(
+            lambda_delay=weights[0] / total,
+            lambda_migration=weights[1] / total,
+            lambda_resource=weights[2] / total,
+            lambda_balance=weights[3] / total,
+            migrate_threshold=min(max(float(self.migrate_threshold), 0.0), 1.0),
+            cooldown_steps=min(max(int(self.cooldown_steps), 0), 20),
+            max_candidates=max(int(self.max_candidates), 1),
+            d_max=max(float(self.d_max), 1e-6),
+            queue_penalty_coeff=max(float(self.queue_penalty_coeff), 0.0),
+            sensitivity_coeff=max(float(self.sensitivity_coeff), 0.0),
+            migration_state_coeff=max(float(self.migration_state_coeff), 0.0),
+            migration_hops_coeff=max(float(self.migration_hops_coeff), 0.0),
+            migration_norm_factor=max(float(self.migration_norm_factor), 1e-6),
+            resource_tension_max=max(float(self.resource_tension_max), 1e-6),
+            allocation_failure_penalty=max(float(self.allocation_failure_penalty), 0.0),
         )

@@ -1,5 +1,5 @@
 seed: 42
-steps: 80
-policy_name: all
-llm_refresh_interval: 1
-llm_retry_remote_every: 5
+steps: 100
+policy_name: cost_aware
+
+operator_instruction: "当前网络波动较强，请优先抑制频繁迁移，保持系统整体稳定与有序。"
