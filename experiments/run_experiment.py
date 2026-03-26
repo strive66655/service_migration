@@ -191,17 +191,17 @@ def run_policy_suite(
             qos_summary_results.append(summary.copy())
 
         for step_idx, step_metric in enumerate(metrics.step_metrics, start=1):
-            row = {
-                "Policy": name,
-                "step": step_idx,
-                "avg_delay": step_metric.avg_delay,
-                "avg_total_cost": step_metric.total_cost,
-                "avg_migrations": step_metric.migration_count,
-                "avg_failed_allocations": step_metric.failed_allocations,
-                "avg_load_ratio": step_metric.avg_load_ratio,
-            }
-            row.update(step_metric.policy_debug)
-            step_results.append(row)
+            step_results.append(
+                {
+                    "Policy": name,
+                    "step": step_idx,
+                    "avg_delay": step_metric.avg_delay,
+                    "avg_total_cost": step_metric.total_cost,
+                    "avg_migrations": step_metric.migration_count,
+                    "avg_failed_allocations": step_metric.failed_allocations,
+                    "avg_load_ratio": step_metric.avg_load_ratio,
+                }
+            )
 
             if _is_qos_policy(name):
                 qos_step_results.append(
