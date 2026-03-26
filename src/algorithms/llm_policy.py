@@ -63,6 +63,7 @@ class LLMCostAwarePolicy(BasePolicy):
             "model": decision.model,
             "used_fallback": decision.used_fallback,
             "reason": decision.reason,
+            "operator_instruction": self.controller.operator_instruction,
             "lambda_delay": self.current_params.lambda_delay,
             "lambda_migration": self.current_params.lambda_migration,
             "lambda_resource": self.current_params.lambda_resource,

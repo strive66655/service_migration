@@ -31,5 +31,6 @@ class SceneSummary:
     users_in_cooldown_ratio: float
     avg_migrations_per_user_recent: float
     service_counts: Dict[str, int]
-    intent_summary: str
+    user_context_summary: str
+    operator_instruction: str
     snapshot: Dict[str, Any]

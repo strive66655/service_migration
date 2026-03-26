@@ -70,12 +70,18 @@ class BuiltLLMPolicy:
     model_name: str
 
 
-def build_llm_policy(policy_params: PolicyParams, policy_config: dict) -> BuiltLLMPolicy:
+def build_llm_policy(policy_params: PolicyParams, policy_config: dict, experiment_config: dict) -> BuiltLLMPolicy:
     llm_cfg = policy_config.get("llm", {})
     provider_name = str(llm_cfg.get("provider", "mock")).lower()
     model_name = str(llm_cfg.get("model", "mock-model"))
     update_interval = int(llm_cfg.get("update_interval", 5))
-
+    operator_instruction = str(
+        experiment_config.get(
+            "operator_instruction",
+            "无显式运维指令，默认以网络稳定、资源效率与服务质量平衡为目标。",
+        )
+    )
+    
     if provider_name == "qwen":
         try:
             provider = QwenProvider(
@@ -108,6 +114,7 @@ def build_llm_policy(policy_params: PolicyParams, policy_config: dict) -> BuiltL
         provider_name=provider_name,
         model_name=model_name,
         default_params=policy_params,
+        operator_instruction=operator_instruction,
     )
 
     return BuiltLLMPolicy(
@@ -221,7 +228,7 @@ def run_policy_suite(
                     print(f"  {key}: {value:.4f}")
 
     if include_llm:
-        built_llm_policy = build_llm_policy(policy_params, policy_config)
+        built_llm_policy = build_llm_policy(policy_params, policy_config, experiment_config)
         llm_policy_name = f"llm_cost_aware_{built_llm_policy.provider_name}"
         env = build_environment(env_config, policy_params, seed=seed)
         runner = SimulationRunner(env, built_llm_policy.policy)

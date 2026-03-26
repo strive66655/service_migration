@@ -18,6 +18,7 @@ class LLMPolicyController:
         provider_name: str,
         model_name: str,
         default_params: PolicyParams,
+        operator_instruction: str = "",
     ) -> None:
         self.provider = provider
         self.provider_name = provider_name
@@ -25,6 +26,7 @@ class LLMPolicyController:
         self.prompt_builder = PromptBuilder()
         self.response_parser = ResponseParser(provider_name, model_name)
         self.default_params = default_params
+        self.operator_instruction = operator_instruction.strip()
         
     def suggest_params(
         self,
@@ -61,21 +63,29 @@ class LLMPolicyController:
             user_data["service_type"] for user_data in snapshot["users"].values()
         )
 
-        representative_intents = {}
-        for user_data in snapshot["users"].values():
-            service_type = user_data.get("service_type", "unknown")
-            intent_text = user_data.get("intent_text", "").strip()
-            if intent_text and service_type not in representative_intents:
-                representative_intents[service_type] = intent_text
+        # representative_intents = {}
+        # for user_data in snapshot["users"].values():
+        #     service_type = user_data.get("service_type", "unknown")
+        #     intent_text = user_data.get("intent_text", "").strip()
+        #     if intent_text and service_type not in representative_intents:
+        #         representative_intents[service_type] = intent_text
 
-        if representative_intents:
-            intent_summary = " ; ".join(
-                f"{service}: {text}"
-                for service, text in representative_intents.items()
+        # if representative_intents:
+        #     intent_summary = " ; ".join(
+        #         f"{service}: {text}"
+        #         for service, text in representative_intents.items()
+        #     )
+        # else:
+        #     intent_summary = "无显式用户意图文本"
+            
+        if service_counter:
+            user_context_summary = " ; ".join(
+                f"{service}: {count} users"
+                for service, count in service_counter.items()
             )
         else:
-            intent_summary = "无显式用户意图文本"
-            
+            user_context_summary = "无可用业务类型统计"
+
         window_metrics = recent_step_metrics
         window_steps = len(window_metrics)
 
@@ -118,7 +128,8 @@ class LLMPolicyController:
             users_in_cooldown_ratio=float(users_in_cooldown_ratio),
             avg_migrations_per_user_recent=float(avg_migrations_per_user_recent),
             service_counts=dict(service_counter),
-            intent_summary=intent_summary,
+            user_context_summary=user_context_summary,
+            operator_instruction=self.operator_instruction or "无显式运维指令，默认以网络稳定与资源效率为目标。",
             snapshot=snapshot,
         )
 
