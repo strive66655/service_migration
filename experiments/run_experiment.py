@@ -36,6 +36,14 @@ BASELINE_SUMMARY_COLUMNS = [
     "avg_migrations",
     "avg_failed_allocations",
     "avg_load_ratio",
+    "avg_load_std",
+    "qos_index",
+    "delay_score",
+    "failure_rate",
+    "failure_rate_score",
+    "load_health_score",
+    "load_distribution_score",
+    "balance_score",
 ]
 BASELINE_STEP_COLUMNS = [
     "Policy",
@@ -45,6 +53,14 @@ BASELINE_STEP_COLUMNS = [
     "avg_migrations",
     "avg_failed_allocations",
     "avg_load_ratio",
+    "avg_load_std",
+    "qos_index",
+    "delay_score",
+    "failure_rate",
+    "failure_rate_score",
+    "load_health_score",
+    "load_distribution_score",
+    "balance_score",
 ]
 
 
@@ -154,6 +170,8 @@ def run_policy_suite(
                     "avg_migrations": step_metric.migration_count,
                     "avg_failed_allocations": step_metric.failed_allocations,
                     "avg_load_ratio": step_metric.avg_load_ratio,
+                    "avg_load_std": step_metric.load_std,
+                    **step_metric.qos_summary(),
                 }
             )
 
@@ -193,6 +211,8 @@ def run_policy_suite(
                     "avg_migrations": step_metric.migration_count,
                     "avg_failed_allocations": step_metric.failed_allocations,
                     "avg_load_ratio": step_metric.avg_load_ratio,
+                    "avg_load_std": step_metric.load_std,
+                    **step_metric.qos_summary(),
                 }
             )
 

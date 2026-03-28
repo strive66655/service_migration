@@ -23,6 +23,8 @@ class SimulationRunner:
         metrics = StepMetrics()
         delay_list: List[float] = []
 
+        metrics.user_count = len(self.env.users)
+
         for user in self.env.users.values():
             prev_node_id = user.current_node_id
             target_node_id = self.policy.select_node(self.env, user)
@@ -63,9 +65,9 @@ class SimulationRunner:
             metrics.total_cost += total_cost
 
         metrics.avg_delay = statistics.mean(delay_list) if delay_list else 0.0
-        metrics.avg_load_ratio = statistics.mean(
-            node.load_ratio for node in self.env.nodes.values()
-        )
+        load_ratios = [node.load_ratio for node in self.env.nodes.values()]
+        metrics.avg_load_ratio = statistics.mean(load_ratios) if load_ratios else 0.0
+        metrics.load_std = statistics.pstdev(load_ratios) if len(load_ratios) > 1 else 0.0
 
         if hasattr(self.policy, "record_step_metrics"):
             self.policy.record_step_metrics(metrics)
