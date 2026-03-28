@@ -1,15 +1,13 @@
 ﻿from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
-import sys
 import pandas as pd
 
 from experiments.visualize_baseline import (
     visualize_baseline_results,
-    visualize_qos_step_curves,
-    visualize_qos_summary,
     visualize_step_curves,
 )
 from src.algorithms.cost_aware import CostAwarePolicy
@@ -48,19 +46,6 @@ BASELINE_STEP_COLUMNS = [
     "avg_failed_allocations",
     "avg_load_ratio",
 ]
-QOS_PRIORITY_COLUMNS = [
-    "Policy",
-    "avg_qos_score",
-    "intent_satisfaction_rate",
-    "sla_violation_rate",
-]
-QOS_STEP_PRIORITY_COLUMNS = [
-    "Policy",
-    "step",
-    "avg_qos_score",
-    "intent_satisfaction_rate",
-    "sla_violation_rate",
-]
 
 
 @dataclass(frozen=True)
@@ -81,7 +66,7 @@ def build_llm_policy(policy_params: PolicyParams, policy_config: dict, experimen
             "无显式运维指令，默认以网络稳定、资源效率与服务质量平衡为目标。",
         )
     )
-    
+
     if provider_name == "qwen":
         try:
             provider = QwenProvider(
@@ -128,38 +113,12 @@ def build_llm_policy(policy_params: PolicyParams, policy_config: dict, experimen
     )
 
 
-def _is_qos_policy(policy_name: str) -> bool:
-    return policy_name == "cost_aware" or policy_name.startswith("llm_cost_aware_")
-
-
-def _ordered_columns(df: pd.DataFrame, priority_columns: list[str]) -> list[str]:
-    present_priority = [column for column in priority_columns if column in df.columns]
-    remaining = sorted(column for column in df.columns if column not in present_priority)
-    return present_priority + remaining
-
-
-def _finalize_qos_frames(
-    qos_summary_results: list[dict],
-    qos_step_results: list[dict],
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    qos_summary_df = pd.DataFrame(qos_summary_results)
-    qos_step_df = pd.DataFrame(qos_step_results)
-
-    if not qos_summary_df.empty:
-        qos_summary_df = qos_summary_df[_ordered_columns(qos_summary_df, QOS_PRIORITY_COLUMNS)]
-    if not qos_step_df.empty:
-        qos_step_df = qos_step_df[_ordered_columns(qos_step_df, QOS_STEP_PRIORITY_COLUMNS)]
-
-    return qos_summary_df, qos_step_df
-
-
 def run_policy_suite(
     env_config: dict,
     policy_config: dict,
     experiment_config: dict,
     include_llm: bool = True,
     verbose: bool = True,
-    return_qos_details: bool = False,
 ):
     policy_params = PolicyParams.from_dict(policy_config).normalized()
     steps = int(experiment_config.get("steps", 20))
@@ -174,8 +133,6 @@ def run_policy_suite(
     summary_results: list[dict] = []
     step_results: list[dict] = []
     llm_rows: list[dict] = []
-    qos_summary_results: list[dict] = []
-    qos_step_results: list[dict] = []
 
     for name, policy_factory in policies.items():
         env = build_environment(env_config, policy_params, seed=seed)
@@ -186,9 +143,6 @@ def run_policy_suite(
         summary = metrics.summary()
         summary["Policy"] = name
         summary_results.append(summary)
-
-        if _is_qos_policy(name):
-            qos_summary_results.append(summary.copy())
 
         for step_idx, step_metric in enumerate(metrics.step_metrics, start=1):
             step_results.append(
@@ -202,15 +156,6 @@ def run_policy_suite(
                     "avg_load_ratio": step_metric.avg_load_ratio,
                 }
             )
-
-            if _is_qos_policy(name):
-                qos_step_results.append(
-                    {
-                        "Policy": name,
-                        "step": step_idx,
-                        **step_metric.qos_summary(),
-                    }
-                )
 
         if hasattr(policy, "decision_history"):
             for row in policy.decision_history:
@@ -237,7 +182,6 @@ def run_policy_suite(
         summary = metrics.summary()
         summary["Policy"] = llm_policy_name
         summary_results.append(summary)
-        qos_summary_results.append(summary.copy())
 
         for step_idx, step_metric in enumerate(metrics.step_metrics, start=1):
             step_results.append(
@@ -249,13 +193,6 @@ def run_policy_suite(
                     "avg_migrations": step_metric.migration_count,
                     "avg_failed_allocations": step_metric.failed_allocations,
                     "avg_load_ratio": step_metric.avg_load_ratio,
-                }
-            )
-            qos_step_results.append(
-                {
-                    "Policy": llm_policy_name,
-                    "step": step_idx,
-                    **step_metric.qos_summary(),
                 }
             )
 
@@ -279,10 +216,7 @@ def run_policy_suite(
     step_df = pd.DataFrame(step_results)
     step_df = step_df[BASELINE_STEP_COLUMNS]
     llm_df = pd.DataFrame(llm_rows)
-    qos_summary_df, qos_step_df = _finalize_qos_frames(qos_summary_results, qos_step_results)
 
-    if return_qos_details:
-        return summary_df, step_df, llm_df, qos_summary_df, qos_step_df
     return summary_df, step_df, llm_df
 
 
@@ -291,13 +225,12 @@ def main() -> None:
     policy_config = load_config("config/policy.yaml")
     experiment_config = load_config("config/experiment.yaml")
 
-    summary_df, step_df, llm_df, qos_summary_df, qos_step_df = run_policy_suite(
+    summary_df, step_df, llm_df = run_policy_suite(
         env_config=env_config,
         policy_config=policy_config,
         experiment_config=experiment_config,
         include_llm=True,
         verbose=True,
-        return_qos_details=True,
     )
 
     output_dir = Path("experiments/results")
@@ -305,19 +238,9 @@ def main() -> None:
 
     summary_csv = output_dir / "baseline_results.csv"
     step_csv = output_dir / "baseline_step_results.csv"
-    qos_summary_csv = output_dir / "qos_results.csv"
-    qos_step_csv = output_dir / "qos_step_results.csv"
 
     summary_df.to_csv(summary_csv, index=False, encoding="utf-8-sig")
     step_df.to_csv(step_csv, index=False, encoding="utf-8-sig")
-
-    if not qos_summary_df.empty:
-        qos_summary_df.to_csv(qos_summary_csv, index=False, encoding="utf-8-sig")
-        print(f"QoS summary saved to: {qos_summary_csv}")
-
-    if not qos_step_df.empty:
-        qos_step_df.to_csv(qos_step_csv, index=False, encoding="utf-8-sig")
-        print(f"QoS step results saved to: {qos_step_csv}")
 
     if not llm_df.empty:
         llm_csv = output_dir / "llm_decisions.csv"
@@ -330,10 +253,6 @@ def main() -> None:
     figures_dir = output_dir / "figures"
     visualize_baseline_results(summary_csv, figures_dir)
     visualize_step_curves(step_csv, figures_dir)
-    if not qos_summary_df.empty:
-        visualize_qos_summary(qos_summary_csv, figures_dir)
-    if not qos_step_df.empty:
-        visualize_qos_step_curves(qos_step_csv, figures_dir)
 
 
 if __name__ == "__main__":

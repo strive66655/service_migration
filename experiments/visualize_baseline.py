@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 
@@ -11,16 +11,6 @@ CORE_METRICS = [
     ("avg_total_cost", "Average Total Cost", True),
     ("avg_delay", "Average Delay", True),
     ("avg_failed_allocations", "Failed Allocations", True),
-]
-QOS_CORE_METRICS = [
-    ("avg_qos_score", "Average QoS Score", False),
-    ("intent_satisfaction_rate", "Intent Satisfaction Rate", False),
-    ("sla_violation_rate", "SLA Violation Rate", True),
-]
-QOS_TREND_METRICS = [
-    ("avg_qos_score", "Average QoS Score"),
-    ("intent_satisfaction_rate", "Intent Satisfaction Rate"),
-    ("sla_violation_rate", "SLA Violation Rate"),
 ]
 
 POLICY_COLORS = {
@@ -81,8 +71,6 @@ def _policy_color(policy: str) -> str:
 def _format_value(metric: str, value: float) -> str:
     if metric in {"avg_failed_allocations", "avg_migrations"}:
         return f"{value:.0f}" if float(value).is_integer() else f"{value:.2f}"
-    if "rate" in metric or "score" in metric:
-        return f"{value:.3f}"
     return f"{value:.2f}"
 
 
@@ -90,8 +78,6 @@ def _clean_output_dir(output_path: Path) -> None:
     for filename in LEGACY_FIGURES + [
         "baseline_overview.png",
         "cost_trend.png",
-        "qos_overview.png",
-        "qos_trend.png",
     ]:
         file_path = output_path / filename
         if file_path.exists():
@@ -149,55 +135,6 @@ def _spread_end_labels(values: list[float], min_gap: float) -> list[float]:
         prev_y = target
 
     return output
-
-
-def _extract_service_metrics(df: pd.DataFrame, suffix: str) -> list[str]:
-    services = []
-    for column in df.columns:
-        if column.endswith(suffix):
-            services.append(column[: -len(suffix)])
-    return sorted(services)
-
-
-def _draw_service_grouped_bars(
-    ax: plt.Axes,
-    df: pd.DataFrame,
-    suffix: str,
-    title: str,
-    ylabel: str,
-) -> None:
-    services = _extract_service_metrics(df, suffix)
-    if not services:
-        ax.set_visible(False)
-        return
-
-    policies = list(df["Policy"])
-    x_positions = list(range(len(services)))
-    width = 0.8 / max(len(policies), 1)
-
-    for idx, policy in enumerate(policies):
-        offsets = [x + (idx - (len(policies) - 1) / 2) * width for x in x_positions]
-        values = [
-            float(df.loc[df["Policy"] == policy, f"{service}{suffix}"].iloc[0])
-            if f"{service}{suffix}" in df.columns
-            else 0.0
-            for service in services
-        ]
-        ax.bar(
-            offsets,
-            values,
-            width=width,
-            color=_policy_color(policy),
-            label=policy,
-            alpha=0.9,
-        )
-
-    ax.set_title(title, loc="left", pad=10)
-    ax.set_ylabel(ylabel)
-    ax.set_xticks(x_positions)
-    ax.set_xticklabels(services)
-    ax.grid(True, axis="y")
-    ax.grid(False, axis="x")
 
 
 def _plot_labeled_trend(ax: plt.Axes, df: pd.DataFrame, metric: str, title: str) -> None:
@@ -353,92 +290,6 @@ def visualize_step_curves(
     print(f"Saved trend figure to: {output_path / 'cost_trend.png'}")
 
 
-def visualize_qos_summary(
-    csv_file: str | Path, output_dir: str | Path = "experiments/results/figures"
-) -> None:
-    csv_path = Path(csv_file)
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    if not csv_path.exists():
-        raise FileNotFoundError(f"CSV file not found: {csv_path}")
-
-    _setup_matplotlib_style()
-    df = pd.read_csv(csv_path)
-    if df.empty:
-        return
-
-    fig, axes = plt.subplots(2, 3, figsize=(16, 9))
-    axes = axes.flatten()
-
-    for axis, (metric, title, ascending) in zip(axes[:3], QOS_CORE_METRICS):
-        _draw_metric_bar(axis, df, metric, title, ascending=ascending)
-
-    _draw_service_grouped_bars(
-        axes[3],
-        df,
-        "_intent_satisfaction_rate",
-        "Service Intent Satisfaction",
-        "Rate",
-    )
-    _draw_service_grouped_bars(
-        axes[4],
-        df,
-        "_sla_violated_rate",
-        "Service SLA Violation",
-        "Rate",
-    )
-    _draw_service_grouped_bars(
-        axes[5],
-        df,
-        "_p95_delay",
-        "Service P95 Delay",
-        "Delay",
-    )
-
-    handles = [
-        Patch(facecolor=_policy_color(policy), edgecolor="none", label=policy)
-        for policy in df["Policy"]
-    ]
-    fig.suptitle("QoS Comparison Overview", fontsize=15, fontweight="semibold", y=0.98)
-    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.01), ncol=len(handles), frameon=False)
-    fig.tight_layout(rect=(0, 0.06, 1, 0.96), w_pad=2.0, h_pad=2.2)
-    fig.savefig(output_path / "qos_overview.png", dpi=180, bbox_inches="tight")
-    plt.close(fig)
-
-    print(f"Saved QoS overview figure to: {output_path / 'qos_overview.png'}")
-
-
-def visualize_qos_step_curves(
-    step_csv_file: str | Path, output_dir: str | Path = "experiments/results/figures"
-) -> None:
-    step_csv_path = Path(step_csv_file)
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    if not step_csv_path.exists():
-        raise FileNotFoundError(f"Step CSV file not found: {step_csv_path}")
-
-    _setup_matplotlib_style()
-    df = pd.read_csv(step_csv_path)
-    if df.empty:
-        return
-
-    fig, axes = plt.subplots(1, 3, figsize=(16, 4.8))
-
-    for axis, (metric, title) in zip(axes, QOS_TREND_METRICS):
-        _plot_labeled_trend(axis, df, metric, title)
-        axis.set_ylabel(title)
-
-    fig.tight_layout()
-    fig.savefig(output_path / "qos_trend.png", dpi=180, bbox_inches="tight")
-    plt.close(fig)
-
-    print(f"Saved QoS trend figure to: {output_path / 'qos_trend.png'}")
-
-
 if __name__ == "__main__":
     visualize_baseline_results("experiments/results/baseline_results.csv")
     visualize_step_curves("experiments/results/baseline_step_results.csv")
-    visualize_qos_summary("experiments/results/qos_results.csv")
-    visualize_qos_step_curves("experiments/results/qos_step_results.csv")
