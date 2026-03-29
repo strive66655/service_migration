@@ -13,13 +13,19 @@ class ResponseParser:
         self.provider_name = provider_name
         self.model_name = model_name
 
-    def parse(self, raw_text: str, default_params: PolicyParams) -> LLMDecision:
+    def parse(
+        self,
+        raw_text: str,
+        default_params: PolicyParams,
+        experiment_mode: str = "main",
+    ) -> LLMDecision:
         try:
             payload = self._extract_json(raw_text)
-            safe_partial = self._sanitize_partial(payload)
+            safe_partial = self._sanitize_partial(payload, experiment_mode=experiment_mode)
             merged = default_params.merged_with(safe_partial).normalized()
             used_fallback = not bool(safe_partial)
             reason = str(payload.get("reason", "No reason provided"))
+
             if used_fallback:
                 reason = (
                     f"{reason} "
@@ -46,7 +52,6 @@ class ResponseParser:
                 parsed_payload={},
             )
 
-    
     def _extract_json(self, raw_text: str) -> Dict[str, Any]:
         raw_text = raw_text.strip()
 
@@ -60,34 +65,39 @@ class ResponseParser:
         match = re.search(r"\{.*\}", raw_text, flags=re.DOTALL)
         if not match:
             raise ValueError("No JSON object found in the response.")
-        
+
         candidate = match.group(0)
         data = json.loads(candidate)
         if not isinstance(data, dict):
             raise ValueError("Parsed JSON is not an object.")
         return data
 
-    def _sanitize_partial(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _sanitize_partial(
+        self,
+        payload: Dict[str, Any],
+        experiment_mode: str = "main",
+    ) -> Dict[str, Any]:
         safe: Dict[str, Any] = {}
+        experiment_mode = experiment_mode.strip().lower()
 
         float_fields = [
             "lambda_delay",
             "lambda_migration",
             "lambda_resource",
             "lambda_balance",
-            "migrate_threshold",
         ]
-        int_fields = ["cooldown_steps"]
+        int_fields = []
+
+        if experiment_mode == "extended":
+            float_fields.append("migrate_threshold")
+            int_fields.append("cooldown_steps")
 
         for key in float_fields:
             if key in payload:
                 safe[key] = float(payload[key])
-            
+
         for key in int_fields:
             if key in payload:
                 safe[key] = int(payload[key])
 
         return safe
-                
-    
-    

@@ -83,6 +83,10 @@ def build_llm_policy(
     provider_name = str(llm_cfg.get("provider", "mock")).lower()
     model_name = str(llm_cfg.get("model", "mock-model"))
     update_interval = int(llm_cfg.get("update_interval", 5))
+    experiment_mode = str(
+        experiment_config.get("llm_experiment_mode", "main")
+    ).strip().lower()
+
     operator_instruction = str(
         experiment_config.get(
             "operator_instruction",
@@ -123,6 +127,7 @@ def build_llm_policy(
         model_name=model_name,
         default_params=policy_params,
         operator_instruction=operator_instruction,
+        experiment_mode=experiment_mode,
     )
 
     return BuiltLLMPolicy(

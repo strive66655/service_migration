@@ -61,6 +61,7 @@ class LLMCostAwarePolicy(BasePolicy):
             "step": current_step,
             "provider": decision.provider,
             "model": decision.model,
+            "experiment_mode": self.controller.experiment_mode,
             "used_fallback": decision.used_fallback,
             "reason": decision.reason,
             "operator_instruction": self.controller.operator_instruction,

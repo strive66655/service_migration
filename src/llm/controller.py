@@ -23,6 +23,7 @@ class LLMPolicyController:
         model_name: str,
         default_params: PolicyParams,
         operator_instruction: str = "",
+        experiment_mode: str = "main",
     ) -> None:
         self.provider = provider
         self.provider_name = provider_name
@@ -31,6 +32,7 @@ class LLMPolicyController:
         self.response_parser = ResponseParser(provider_name, model_name)
         self.default_params = default_params
         self.operator_instruction = operator_instruction.strip()
+        self.experiment_mode = experiment_mode.strip().lower()
 
     def suggest_params(
         self,
@@ -40,7 +42,7 @@ class LLMPolicyController:
     ) -> LLMDecision:
         active_params = current_params or self.default_params
         scene = self._build_scene_summary(env, recent_step_metrics or [])
-        system_prompt, user_prompt = self.prompt_builder.build(scene, active_params)
+        system_prompt, user_prompt = self.prompt_builder.build(scene, active_params, experiment_mode=self.experiment_mode)
         self._debug_prompt_payload(scene.step, user_prompt)
         try:
             raw_text = self.provider.generate(system_prompt, user_prompt)
@@ -55,7 +57,7 @@ class LLMPolicyController:
                 parsed_payload={},
             )
 
-        return self.response_parser.parse(raw_text, active_params)
+        return self.response_parser.parse(raw_text, active_params, experiment_mode=self.experiment_mode)
 
     def _debug_prompt_payload(self, step: int, user_prompt: str) -> None:
         try:

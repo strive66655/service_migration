@@ -12,9 +12,46 @@ class PromptBuilder:
         self,
         scene: SceneSummary,
         default_params: PolicyParams,
+        experiment_mode: str = "main"
     ) -> Tuple[str, str]:
+        experiment_mode = experiment_mode.strip().lower()
+        if experiment_mode == "extended":
+            allowed_fields = """
+            允许输出字段：
+            lambda_delay
+            lambda_migration
+            lambda_resource
+            lambda_balance
+            migrate_threshold
+            cooldown_steps
+            reason
+            """.strip()
+
+            extra_rules = """
+            决策补充规则：
+            1. migrate_threshold 和 cooldown_steps 只有在有明确统计依据时才允许调整。
+            2. 不要轻易同时大幅提高 migrate_threshold 和 cooldown_steps。
+            3. 若 migration_rate_recent 不高，但 avg_delay_recent 或 failed_allocation_rate_recent 较高，
+               说明迁移抑制可能过强，不应继续盲目增强抑制。
+            4. 若 users_in_cooldown_ratio 已较高，除非迁移率依然异常高，否则不要继续提高 cooldown_steps。
+            """.strip()
+        else:
+            allowed_fields = """
+            允许输出字段：
+            lambda_delay
+            lambda_migration
+            lambda_resource
+            lambda_balance
+            reason
+            """.strip()
+
+            extra_rules = """
+            决策补充规则：
+            1. migrate_threshold 和 cooldown_steps 在当前主实验模式下固定，不允许输出这两个字段。
+            2. 你的任务仅限于调整四个 lambda 权重。
+            """.strip()
         # HACK: 提示词改进
-        system_prompt = """
+        system_prompt = f"""
         你是移动边缘计算中的运维策略参数优化器。
 
         你的职责：
@@ -28,14 +65,7 @@ class PromptBuilder:
         2. 不要输出 markdown 代码块
         3. 不要输出多余解释
 
-        允许输出字段：
-        lambda_delay
-        lambda_migration
-        lambda_resource
-        lambda_balance
-        migrate_threshold
-        cooldown_steps
-        reason
+        {allowed_fields}
 
         你会看到以下关键信号：
         - avg_delay_recent：最近窗口平均时延
@@ -53,9 +83,8 @@ class PromptBuilder:
         3. 若资源紧张或分配失败较多，可适当提高 lambda_resource。
         4. 若负载不均衡明显，可适当提高 lambda_balance。
         5. migrate_threshold 和 cooldown_steps 仅在有明确统计依据时调整，不要轻易同时大幅提高。
-        6. 若 migration_rate_recent 不高，但 avg_delay_recent 或 failed_allocation_rate_recent 较高，说明迁移抑制可能过强，不应盲目继续提高阈值或冷却时间。
-        7. 若 users_in_cooldown_ratio 已经较高，除非迁移率依然异常高，否则不要继续提高 cooldown_steps。
-        8. 运维指令是全局控制意图，但不能违背当前统计现实；必须结合状态指标进行合理调整。
+        
+        {extra_rules}
 
         约束：
         1. 四个 lambda 必须为非负数。
@@ -82,6 +111,7 @@ class PromptBuilder:
                 "service_counts": scene.service_counts,
                 "user_context_summary": scene.user_context_summary,
                 "operator_instruction": scene.operator_instruction,
+                "experiment_mode": experiment_mode,
             },
             "default_params": {
                 "lambda_delay": default_params.lambda_delay,
