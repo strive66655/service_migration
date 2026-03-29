@@ -1,5 +1,9 @@
 seed: 42
 steps: 100
+observe_steps: 20
 policy_name: cost_aware
 
-operator_instruction: "当前网络波动较强，请优先抑制频繁迁移，保持系统整体稳定与有序。"
+interactive_operator_input: true
+initial_instruction_empty: false
+
+operator_instruction: ""

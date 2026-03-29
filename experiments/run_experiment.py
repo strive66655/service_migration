@@ -22,6 +22,7 @@ from src.llm.providers.openrouter_provider import OpenRouterProvider
 from src.llm.providers.qwen_provider import QwenProvider
 from src.runners.simulation_runner import SimulationRunner
 from src.utils.config_loader import load_config
+from src.utils.metrics import SimulationMetrics
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -45,9 +46,11 @@ BASELINE_SUMMARY_COLUMNS = [
     "load_distribution_score",
     "balance_score",
 ]
+
 BASELINE_STEP_COLUMNS = [
     "Policy",
     "step",
+    "phase",
     "avg_delay",
     "avg_total_cost",
     "avg_migrations",
@@ -71,7 +74,11 @@ class BuiltLLMPolicy:
     model_name: str
 
 
-def build_llm_policy(policy_params: PolicyParams, policy_config: dict, experiment_config: dict) -> BuiltLLMPolicy:
+def build_llm_policy(
+    policy_params: PolicyParams,
+    policy_config: dict,
+    experiment_config: dict,
+) -> BuiltLLMPolicy:
     llm_cfg = policy_config.get("llm", {})
     provider_name = str(llm_cfg.get("provider", "mock")).lower()
     model_name = str(llm_cfg.get("model", "mock-model"))
@@ -129,6 +136,80 @@ def build_llm_policy(policy_params: PolicyParams, policy_config: dict, experimen
     )
 
 
+def show_observation_metrics(summary: dict) -> None:
+    print("\n========== 当前系统观测指标 ==========")
+    for key, value in summary.items():
+        if key == "Policy":
+            continue
+        try:
+            print(f"{key}: {float(value):.4f}")
+        except (TypeError, ValueError):
+            print(f"{key}: {value}")
+    print("=====================================\n")
+
+
+def resolve_operator_instruction_from_observation(
+    experiment_config: dict,
+    observation_summary: dict,
+) -> str:
+    default_instruction = str(
+        experiment_config.get(
+            "operator_instruction",
+            "无显式运维指令，默认以网络稳定、资源效率与服务质量平衡为目标。",
+        )
+    ).strip()
+
+    show_observation_metrics(observation_summary)
+    print("请根据以上指标输入新的 operator_instruction。")
+    print("直接回车：使用当前默认值。")
+
+    try:
+        user_input = input(f"\n默认值: {default_instruction}\n> ").strip()
+    except EOFError:
+        user_input = ""
+
+    return user_input if user_input else default_instruction
+
+
+def build_step_row(
+    policy_name: str,
+    step_idx: int,
+    step_metric,
+    phase: str = "full_run",
+) -> dict:
+    return {
+        "Policy": policy_name,
+        "step": step_idx,
+        "phase": phase,
+        "avg_delay": step_metric.avg_delay,
+        "avg_total_cost": step_metric.total_cost,
+        "avg_migrations": step_metric.migration_count,
+        "avg_failed_allocations": step_metric.failed_allocations,
+        "avg_load_ratio": step_metric.avg_load_ratio,
+        "avg_load_std": step_metric.load_std,
+        **step_metric.qos_summary(),
+    }
+
+
+def summarize_simulation(step_metrics: list, policy_name: str) -> dict:
+    metrics = SimulationMetrics(step_metrics=step_metrics)
+    summary = metrics.summary()
+    summary["Policy"] = policy_name
+    return summary
+
+
+def resolve_instruction_phase(
+    step_idx: int,
+    observe_steps: int,
+    instruction_updated: bool,
+) -> str:
+    if step_idx <= observe_steps:
+        return "default_instruction"
+    if instruction_updated:
+        return "updated_instruction"
+    return "default_instruction"
+
+
 def run_policy_suite(
     env_config: dict,
     policy_config: dict,
@@ -140,6 +221,18 @@ def run_policy_suite(
     steps = int(experiment_config.get("steps", 20))
     seed = experiment_config.get("seed")
 
+    observe_steps = int(experiment_config.get("observe_steps", 20))
+    observe_steps = max(0, min(observe_steps, steps))
+
+    interactive_operator_input = bool(
+        experiment_config.get("interactive_operator_input", False)
+    )
+
+    # 是否让前半段用空指令。False 表示沿用 YAML 默认指令。
+    initial_instruction_empty = bool(
+        experiment_config.get("initial_instruction_empty", False)
+    )
+
     policies: dict[str, PolicyFactory] = {
         "never_migrate": lambda: NeverMigratePolicy(),
         "nearest": lambda: NearestPolicy(),
@@ -150,6 +243,7 @@ def run_policy_suite(
     step_results: list[dict] = []
     llm_rows: list[dict] = []
 
+    # baseline
     for name, policy_factory in policies.items():
         env = build_environment(env_config, policy_params, seed=seed)
         policy = policy_factory()
@@ -162,17 +256,12 @@ def run_policy_suite(
 
         for step_idx, step_metric in enumerate(metrics.step_metrics, start=1):
             step_results.append(
-                {
-                    "Policy": name,
-                    "step": step_idx,
-                    "avg_delay": step_metric.avg_delay,
-                    "avg_total_cost": step_metric.total_cost,
-                    "avg_migrations": step_metric.migration_count,
-                    "avg_failed_allocations": step_metric.failed_allocations,
-                    "avg_load_ratio": step_metric.avg_load_ratio,
-                    "avg_load_std": step_metric.load_std,
-                    **step_metric.qos_summary(),
-                }
+                build_step_row(
+                    name,
+                    step_idx,
+                    step_metric,
+                    phase="full_run",
+                )
             )
 
         if hasattr(policy, "decision_history"):
@@ -180,6 +269,7 @@ def run_policy_suite(
                 llm_rows.append(
                     {
                         "Policy": name,
+                        "phase": "full_run",
                         **row,
                     }
                 )
@@ -190,36 +280,76 @@ def run_policy_suite(
                 if key != "Policy":
                     print(f"  {key}: {value:.4f}")
 
+    # llm, same policy object across both phases
     if include_llm:
-        built_llm_policy = build_llm_policy(policy_params, policy_config, experiment_config)
-        llm_policy_name = f"llm_cost_aware_{built_llm_policy.provider_name}"
-        env = build_environment(env_config, policy_params, seed=seed)
-        runner = SimulationRunner(env, built_llm_policy.policy)
-        metrics = runner.run(steps)
+        initial_experiment_config = dict(experiment_config)
+        if initial_instruction_empty:
+            initial_experiment_config["operator_instruction"] = ""
 
-        summary = metrics.summary()
-        summary["Policy"] = llm_policy_name
+        built_llm_policy = build_llm_policy(
+            policy_params,
+            policy_config,
+            initial_experiment_config,
+        )
+        llm_policy = built_llm_policy.policy
+        llm_policy_name = f"llm_cost_aware_{built_llm_policy.provider_name}"
+
+        env = build_environment(env_config, policy_params, seed=seed)
+        runner = SimulationRunner(env, llm_policy)
+
+        llm_step_metrics = []
+
+        # phase 1: default/empty instruction
+        for _ in range(observe_steps):
+            llm_step_metrics.append(runner.step())
+
+        observation_summary = summarize_simulation(
+            llm_step_metrics,
+            f"{llm_policy_name}_default_phase",
+        )
+
+        # phase 2: optionally update instruction, but DO NOT rebuild policy object
+        instruction_updated = False
+        if interactive_operator_input and observe_steps < steps:
+            new_instruction = resolve_operator_instruction_from_observation(
+                experiment_config,
+                observation_summary,
+            )
+            llm_policy.controller.operator_instruction = new_instruction.strip()
+            instruction_updated = True
+
+        remaining_steps = steps - observe_steps
+        for _ in range(remaining_steps):
+            llm_step_metrics.append(runner.step())
+
+        summary = summarize_simulation(llm_step_metrics, llm_policy_name)
         summary_results.append(summary)
 
-        for step_idx, step_metric in enumerate(metrics.step_metrics, start=1):
+        for step_idx, step_metric in enumerate(llm_step_metrics, start=1):
             step_results.append(
-                {
-                    "Policy": llm_policy_name,
-                    "step": step_idx,
-                    "avg_delay": step_metric.avg_delay,
-                    "avg_total_cost": step_metric.total_cost,
-                    "avg_migrations": step_metric.migration_count,
-                    "avg_failed_allocations": step_metric.failed_allocations,
-                    "avg_load_ratio": step_metric.avg_load_ratio,
-                    "avg_load_std": step_metric.load_std,
-                    **step_metric.qos_summary(),
-                }
+                build_step_row(
+                    llm_policy_name,
+                    step_idx,
+                    step_metric,
+                    phase=resolve_instruction_phase(
+                        step_idx,
+                        observe_steps,
+                        instruction_updated,
+                    ),
+                )
             )
 
-        for row in built_llm_policy.policy.decision_history:
+        # decision_history lives in the same policy object and is continuous
+        for row in llm_policy.decision_history:
+            row_step = int(row.get("step", -1))
             llm_rows.append(
                 {
                     "Policy": llm_policy_name,
+                    "phase": resolve_instruction_phase(
+                        row_step,
+                        observe_steps,
+                        instruction_updated,
+                    ),
                     **row,
                 }
             )
@@ -235,6 +365,7 @@ def run_policy_suite(
 
     step_df = pd.DataFrame(step_results)
     step_df = step_df[BASELINE_STEP_COLUMNS]
+
     llm_df = pd.DataFrame(llm_rows)
 
     return summary_df, step_df, llm_df

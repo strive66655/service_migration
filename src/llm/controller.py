@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 from typing import List, Optional
 
 from src.algorithms.policy_params import PolicyParams
 from src.llm.base import BaseLLMProvider
 from src.llm.prompt_builder import PromptBuilder
-from src.llm.schemas import LLMDecision, SceneSummary
 from src.llm.response_parser import ResponseParser
+from src.llm.schemas import LLMDecision, SceneSummary
 from src.utils.metrics import StepMetrics
+
+
+DEFAULT_OPERATOR_INSTRUCTION = "无显式运维指令，默认以网络稳定与资源效率为目标。"
 
 
 class LLMPolicyController:
@@ -27,7 +31,7 @@ class LLMPolicyController:
         self.response_parser = ResponseParser(provider_name, model_name)
         self.default_params = default_params
         self.operator_instruction = operator_instruction.strip()
-        
+
     def suggest_params(
         self,
         env,
@@ -37,6 +41,7 @@ class LLMPolicyController:
         active_params = current_params or self.default_params
         scene = self._build_scene_summary(env, recent_step_metrics or [])
         system_prompt, user_prompt = self.prompt_builder.build(scene, active_params)
+        self._debug_prompt_payload(scene.step, user_prompt)
         try:
             raw_text = self.provider.generate(system_prompt, user_prompt)
         except Exception as exc:
@@ -52,7 +57,31 @@ class LLMPolicyController:
 
         return self.response_parser.parse(raw_text, active_params)
 
-    def _build_scene_summary(self, env, recent_step_metrics: List[StepMetrics]) -> SceneSummary:
+    def _debug_prompt_payload(self, step: int, user_prompt: str) -> None:
+        try:
+            prompt_payload = json.loads(user_prompt)
+        except json.JSONDecodeError:
+            prompt_operator_instruction = "<failed_to_parse_user_prompt>"
+        else:
+            prompt_operator_instruction = prompt_payload.get("scene_summary", {}).get(
+                "operator_instruction",
+                "<missing_operator_instruction>",
+            )
+
+        print("\n========== LLM Prompt Debug ==========")
+        print(f"step: {step}")
+        print(f"controller.operator_instruction: {self.operator_instruction!r}")
+        print(
+            "user_prompt.scene_summary.operator_instruction: "
+            f"{prompt_operator_instruction!r}"
+        )
+        print("======================================\n")
+
+    def _build_scene_summary(
+        self,
+        env,
+        recent_step_metrics: List[StepMetrics],
+    ) -> SceneSummary:
         snapshot = env.snapshot()
 
         node_loads = [node["load_ratio"] for node in snapshot["nodes"].values()]
@@ -63,21 +92,6 @@ class LLMPolicyController:
             user_data["service_type"] for user_data in snapshot["users"].values()
         )
 
-        # representative_intents = {}
-        # for user_data in snapshot["users"].values():
-        #     service_type = user_data.get("service_type", "unknown")
-        #     intent_text = user_data.get("intent_text", "").strip()
-        #     if intent_text and service_type not in representative_intents:
-        #         representative_intents[service_type] = intent_text
-
-        # if representative_intents:
-        #     intent_summary = " ; ".join(
-        #         f"{service}: {text}"
-        #         for service, text in representative_intents.items()
-        #     )
-        # else:
-        #     intent_summary = "无显式用户意图文本"
-            
         if service_counter:
             user_context_summary = " ; ".join(
                 f"{service}: {count} users"
@@ -129,8 +143,6 @@ class LLMPolicyController:
             avg_migrations_per_user_recent=float(avg_migrations_per_user_recent),
             service_counts=dict(service_counter),
             user_context_summary=user_context_summary,
-            operator_instruction=self.operator_instruction or "无显式运维指令，默认以网络稳定与资源效率为目标。",
+            operator_instruction=self.operator_instruction or DEFAULT_OPERATOR_INSTRUCTION,
             snapshot=snapshot,
         )
-
-

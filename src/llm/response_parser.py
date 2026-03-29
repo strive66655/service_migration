@@ -18,13 +18,20 @@ class ResponseParser:
             payload = self._extract_json(raw_text)
             safe_partial = self._sanitize_partial(payload)
             merged = default_params.merged_with(safe_partial).normalized()
+            used_fallback = not bool(safe_partial)
+            reason = str(payload.get("reason", "No reason provided"))
+            if used_fallback:
+                reason = (
+                    f"{reason} "
+                    "(No tunable parameters parsed; using current/default parameters.)"
+                )
 
             return LLMDecision(
                 params=merged,
-                reason=str(payload.get("reason", "No reason provided")),
+                reason=reason,
                 provider=self.provider_name,
                 model=self.model_name,
-                used_fallback=False,
+                used_fallback=used_fallback,
                 raw_text=raw_text,
                 parsed_payload=payload,
             )
