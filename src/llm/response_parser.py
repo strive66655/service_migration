@@ -86,11 +86,10 @@ class ResponseParser:
             "lambda_resource",
             "lambda_balance",
         ]
-        int_fields = []
+        int_fields = ["cooldown_steps"]
 
         if experiment_mode == "extended":
             float_fields.append("migrate_threshold")
-            int_fields.append("cooldown_steps")
 
         for key in float_fields:
             if key in payload:

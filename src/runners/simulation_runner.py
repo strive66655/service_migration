@@ -13,6 +13,13 @@ class SimulationRunner:
         self.env = env
         self.policy = policy
 
+    def _resolve_policy_params(self):
+        if hasattr(self.policy, "current_params"):
+            return self.policy.current_params
+        if hasattr(self.policy, "params"):
+            return self.policy.params
+        return self.env.params
+
     def step(self) -> StepMetrics:
         self.env.time_step += 1
         self.env.move_users()
@@ -28,7 +35,7 @@ class SimulationRunner:
         for user in self.env.users.values():
             prev_node_id = user.current_node_id
             target_node_id = self.policy.select_node(self.env, user)
-            policy_params = getattr(self.policy, "current_params", self.env.params)
+            policy_params = self._resolve_policy_params()
 
             if target_node_id is None:
                 metrics.failed_allocations += 1

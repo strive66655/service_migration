@@ -22,7 +22,7 @@ class CostAwarePolicy(BasePolicy):
         )
 
     def select_node(self, env: MECEnvironment, user: User) -> Optional[int]:
-        candidates = env.get_candidates(user)
+        candidates = env.get_candidates_with_params(user, params=self.params)
         if not candidates:
             return None
 

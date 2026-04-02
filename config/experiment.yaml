@@ -2,9 +2,49 @@ seed: 42
 steps: 100
 observe_steps: 20
 policy_name: cost_aware
+paper_default_scenario: paper_default
+matrix_seeds: [11, 22, 33, 44, 55]
 
+auto_generate_operator_instruction: true
 interactive_operator_input: true
 initial_instruction_empty: false
 operator_instruction: ""
 
-llm_experiment_mode: "extended" # main / extended
+llm_experiment_mode: "main" # main / extended
+
+operator_instruction_rules:
+  failure_high: 2.0
+  load_ratio_high: 0.75
+  load_std_high: 0.20
+  delay_medium: 32.0
+  delay_high: 38.0
+  migrations_high: 2.0
+  migrations_low: 0.3
+
+scenario_matrix:
+  - name: paper_default
+    description: Default paper setting for the main comparison table and figures.
+    env_overrides: {}
+    experiment_overrides: {}
+  - name: user_scale_up
+    description: Increase user population while keeping other factors unchanged.
+    env_overrides:
+      user_multiplier: 2
+    experiment_overrides: {}
+  - name: capacity_tight
+    description: Reduce node capacities to create stronger resource pressure.
+    env_overrides:
+      cpu_capacity_scale: 0.85
+      bandwidth_capacity_scale: 0.85
+    experiment_overrides: {}
+  - name: mobility_jitter
+    description: Add stronger movement perturbation without changing base topology.
+    env_overrides:
+      user_position_jitter: 4.0
+      user_velocity_jitter: 1.2
+    experiment_overrides: {}
+  - name: ar_heavy_mix
+    description: Shift the workload mix toward latency-sensitive AR traffic.
+    service_type_sequence: [ar, ar, video, ar, compute]
+    env_overrides: {}
+    experiment_overrides: {}

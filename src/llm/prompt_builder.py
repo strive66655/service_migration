@@ -42,13 +42,15 @@ class PromptBuilder:
             lambda_migration
             lambda_resource
             lambda_balance
+            cooldown_steps
             reason
             """.strip()
 
             extra_rules = """
             决策补充规则：
-            1. migrate_threshold 和 cooldown_steps 在当前主实验模式下固定，不允许输出这两个字段。
-            2. 你的任务仅限于调整四个 lambda 权重。
+            1. migrate_threshold 在当前主实验模式下固定，不允许输出该字段。
+            2. cooldown_steps 只有在有明确统计依据时才允许调整。
+            3. 你的任务以调整四个 lambda 权重为主，必要时可小幅调整 cooldown_steps。
             """.strip()
         # HACK: 提示词改进
         system_prompt = f"""

@@ -65,6 +65,33 @@ class LLMCostAwarePolicy(BasePolicy):
             "used_fallback": decision.used_fallback,
             "reason": decision.reason,
             "operator_instruction": self.controller.operator_instruction,
+            "scene_step": self.controller.last_scene_summary.get("step"),
+            "scene_avg_node_load": self.controller.last_scene_summary.get("avg_node_load"),
+            "scene_max_node_load": self.controller.last_scene_summary.get("max_node_load"),
+            "scene_failed_allocations_recent": self.controller.last_scene_summary.get(
+                "failed_allocations_recent"
+            ),
+            "scene_migrations_recent": self.controller.last_scene_summary.get(
+                "migrations_recent"
+            ),
+            "scene_avg_delay_recent": self.controller.last_scene_summary.get(
+                "avg_delay_recent"
+            ),
+            "scene_migration_rate_recent": self.controller.last_scene_summary.get(
+                "migration_rate_recent"
+            ),
+            "scene_failed_allocation_rate_recent": self.controller.last_scene_summary.get(
+                "failed_allocation_rate_recent"
+            ),
+            "scene_users_in_cooldown_ratio": self.controller.last_scene_summary.get(
+                "users_in_cooldown_ratio"
+            ),
+            "scene_avg_migrations_per_user_recent": self.controller.last_scene_summary.get(
+                "avg_migrations_per_user_recent"
+            ),
+            "scene_user_context_summary": self.controller.last_scene_summary.get(
+                "user_context_summary"
+            ),
             "lambda_delay": self.current_params.lambda_delay,
             "lambda_migration": self.current_params.lambda_migration,
             "lambda_resource": self.current_params.lambda_resource,
@@ -72,6 +99,24 @@ class LLMCostAwarePolicy(BasePolicy):
             "migrate_threshold": self.current_params.migrate_threshold,
             "cooldown_steps": self.current_params.cooldown_steps,
         }
+
+        print("\n========== LLM Param Refresh ==========")
+        print(f"step: {current_step}")
+        print(
+            "params: "
+            f"delay={self.current_params.lambda_delay:.4f}, "
+            f"migration={self.current_params.lambda_migration:.4f}, "
+            f"resource={self.current_params.lambda_resource:.4f}, "
+            f"balance={self.current_params.lambda_balance:.4f}, "
+            f"threshold={self.current_params.migrate_threshold:.4f}, "
+            f"cooldown={self.current_params.cooldown_steps}"
+        )
+        print(
+            "runtime_source: "
+            "policy.current_params -> inner_policy.params -> runner cost accounting"
+        )
+        print(f"reason: {decision.reason}")
+        print("=======================================\n")
 
         self.decision_history.append(self.last_decision_meta.copy())
 

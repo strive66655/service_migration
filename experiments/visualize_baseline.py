@@ -84,6 +84,17 @@ def _clean_output_dir(output_path: Path) -> None:
             file_path.unlink()
 
 
+def _load_clean_csv(csv_file: str | Path) -> pd.DataFrame:
+    df = pd.read_csv(csv_file)
+    df.columns = [str(column).strip() for column in df.columns]
+    for column in df.columns:
+        if pd.api.types.is_object_dtype(df[column]):
+            df[column] = df[column].map(
+                lambda value: value.strip() if isinstance(value, str) else value
+            )
+    return df
+
+
 def _draw_metric_bar(
     ax: plt.Axes,
     df: pd.DataFrame,
@@ -193,7 +204,7 @@ def visualize_baseline_results(
     _setup_matplotlib_style()
     _clean_output_dir(output_path)
 
-    df = pd.read_csv(csv_path)
+    df = _load_clean_csv(csv_path)
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 8.5))
     axes = axes.flatten()
@@ -278,7 +289,7 @@ def visualize_step_curves(
 
     _setup_matplotlib_style()
 
-    df = pd.read_csv(step_csv_path)
+    df = _load_clean_csv(step_csv_path)
     fig, ax = plt.subplots(figsize=(10.5, 5.2))
     _plot_labeled_trend(ax, df, "avg_total_cost", "Average Total Cost over Time")
     ax.set_ylabel("Average Total Cost")

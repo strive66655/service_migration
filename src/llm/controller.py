@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from dataclasses import asdict
 from typing import List, Optional
 
 from src.algorithms.policy_params import PolicyParams
@@ -33,6 +34,7 @@ class LLMPolicyController:
         self.default_params = default_params
         self.operator_instruction = operator_instruction.strip()
         self.experiment_mode = experiment_mode.strip().lower()
+        self.last_scene_summary: dict = {}
 
     def suggest_params(
         self,
@@ -42,6 +44,7 @@ class LLMPolicyController:
     ) -> LLMDecision:
         active_params = current_params or self.default_params
         scene = self._build_scene_summary(env, recent_step_metrics or [])
+        self.last_scene_summary = asdict(scene)
         system_prompt, user_prompt = self.prompt_builder.build(scene, active_params, experiment_mode=self.experiment_mode)
         self._debug_prompt_payload(scene.step, user_prompt)
         try:

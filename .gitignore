@@ -204,6 +204,10 @@ experiments/results/
 .cursorignore
 .cursorindexingignore
 
+# Datasets
+data/raw/*
+data/processed/*
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
