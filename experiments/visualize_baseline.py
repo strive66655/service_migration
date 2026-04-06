@@ -148,26 +148,51 @@ def _spread_end_labels(values: list[float], min_gap: float) -> list[float]:
     return output
 
 
+def _smoothed_series(values: pd.Series, window: int = 7) -> pd.Series:
+    if len(values) <= 2:
+        return values
+    effective_window = min(window, len(values))
+    if effective_window % 2 == 0 and effective_window > 1:
+        effective_window -= 1
+    return values.rolling(
+        window=max(effective_window, 1),
+        center=True,
+        min_periods=1,
+    ).mean()
+
+
 def _plot_labeled_trend(ax: plt.Axes, df: pd.DataFrame, metric: str, title: str) -> None:
     policy_frames: list[tuple[str, float, float, str]] = []
 
     for policy in df["Policy"].unique():
         sub_df = df[df["Policy"] == policy].sort_values("step")
         color = _policy_color(policy)
+        smooth_values = _smoothed_series(sub_df[metric])
+
         ax.plot(
             sub_df["step"],
             sub_df[metric],
-            linewidth=2.3,
+            linewidth=1.0,
+            color=color,
+            alpha=0.2,
+            zorder=1,
+        )
+        ax.plot(
+            sub_df["step"],
+            smooth_values,
+            linewidth=2.6,
             color=color,
             label=policy,
+            zorder=2,
         )
 
-        last_row = sub_df.iloc[-1]
+        last_step = float(sub_df.iloc[-1]["step"])
+        last_value = float(smooth_values.iloc[-1])
         policy_frames.append(
             (
                 policy,
-                float(last_row["step"]),
-                float(last_row[metric]),
+                last_step,
+                last_value,
                 color,
             )
         )

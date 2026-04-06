@@ -35,7 +35,7 @@ class CostAwarePolicy(BasePolicy):
             return best_node.node_id
 
         current_node = env.nodes[user.current_node_id]
-        if not env.can_allocate(user, current_node):
+        if not env.can_keep_assignment(user, current_node, params=self.params):
             return best_node.node_id
 
         if user.cooldown_left > 0:

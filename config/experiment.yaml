@@ -1,6 +1,6 @@
 seed: 42
-steps: 100
-observe_steps: 20
+steps: 20
+observe_steps: 2
 policy_name: cost_aware
 paper_default_scenario: paper_default
 matrix_seeds: [11, 22, 33, 44, 55]
