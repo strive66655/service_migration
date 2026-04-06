@@ -250,4 +250,10 @@ set QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 
 ## License
 
+## Baseline Policy Notes
+
+- `myopic`: picks the feasible node with the minimum current `assignment_cost`, with no cooldown, threshold, or stay bias.
+- `cost_aware`: the main cost-aware baseline in this repo, using cooldown, stay bias, relative-gain migration gating, and lightweight business awareness based on `delay_budget` and `priority`.
+- `llm_cost_aware_*`: continues to use `cost_aware` as its inner policy.
+
 许可证见 [`LICENSE`](/f:/service_migration/LICENSE)。

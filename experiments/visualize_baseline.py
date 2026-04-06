@@ -16,10 +16,20 @@ CORE_METRICS = [
 POLICY_COLORS = {
     "never_migrate": "#C44E52",
     "nearest": "#4C72B0",
+    "myopic": "#8172B3",
     "cost_aware": "#55A868",
     "llm_cost_aware_openrouter": "#DD6B20",
     "llm_cost_aware_mock": "#DD6B20",
 }
+
+POLICY_ORDER = [
+    "never_migrate",
+    "nearest",
+    "myopic",
+    "cost_aware",
+    "llm_cost_aware_openrouter",
+    "llm_cost_aware_mock",
+]
 
 LEGACY_FIGURES = [
     "avg_delay.png",
@@ -68,6 +78,12 @@ def _policy_color(policy: str) -> str:
     return POLICY_COLORS.get(policy, "#667085")
 
 
+def _policy_rank(policy: str) -> int:
+    if policy.startswith("llm_cost_aware_"):
+        return POLICY_ORDER.index("llm_cost_aware_openrouter")
+    return POLICY_ORDER.index(policy) if policy in POLICY_ORDER else len(POLICY_ORDER)
+
+
 def _format_value(metric: str, value: float) -> str:
     if metric in {"avg_failed_allocations", "avg_migrations"}:
         return f"{value:.0f}" if float(value).is_integer() else f"{value:.2f}"
@@ -102,7 +118,12 @@ def _draw_metric_bar(
     title: str,
     ascending: bool = True,
 ) -> None:
-    metric_df = df[["Policy", metric]].sort_values(metric, ascending=ascending)
+    metric_df = df[["Policy", metric]].copy()
+    metric_df["_policy_rank"] = metric_df["Policy"].map(_policy_rank)
+    metric_df = metric_df.sort_values(
+        [metric, "_policy_rank"],
+        ascending=[ascending, True],
+    )
     colors = [_policy_color(policy) for policy in metric_df["Policy"]]
     bars = ax.barh(metric_df["Policy"], metric_df[metric], color=colors, height=0.58)
 
@@ -164,7 +185,7 @@ def _smoothed_series(values: pd.Series, window: int = 7) -> pd.Series:
 def _plot_labeled_trend(ax: plt.Axes, df: pd.DataFrame, metric: str, title: str) -> None:
     policy_frames: list[tuple[str, float, float, str]] = []
 
-    for policy in df["Policy"].unique():
+    for policy in sorted(df["Policy"].unique(), key=_policy_rank):
         sub_df = df[df["Policy"] == policy].sort_values("step")
         color = _policy_color(policy)
         smooth_values = _smoothed_series(sub_df[metric])
@@ -242,7 +263,8 @@ def visualize_baseline_results(
         max_val = norm_df[metric].max()
         norm_df[metric] = norm_df[metric] / max_val if max_val > 0 else 0.0
 
-    norm_df = norm_df.sort_values("avg_total_cost", ascending=True)
+    norm_df["_policy_rank"] = norm_df["Policy"].map(_policy_rank)
+    norm_df = norm_df.sort_values(["avg_total_cost", "_policy_rank"], ascending=True)
     x_positions = list(range(len(norm_df)))
     width = 0.22
     hatches = ["", "//", "xx"]

@@ -19,6 +19,7 @@ from experiments.visualize_baseline import (  # noqa: E402
 )
 from src.algorithms.cost_aware import CostAwarePolicy  # noqa: E402
 from src.algorithms.llm_policy import LLMCostAwarePolicy  # noqa: E402
+from src.algorithms.myopic import MyopicPolicy  # noqa: E402
 from src.algorithms.nearest import NearestPolicy  # noqa: E402
 from src.algorithms.never_migrate import NeverMigratePolicy  # noqa: E402
 from src.algorithms.policy_params import PolicyParams  # noqa: E402
@@ -124,6 +125,32 @@ class BuiltLLMPolicy:
     policy: LLMCostAwarePolicy
     provider_name: str
     model_name: str
+
+
+POLICY_OVERRIDE_SECTIONS = {
+    "cost_aware": "cost_aware",
+}
+
+
+def _policy_base_config(policy_config: dict) -> dict[str, Any]:
+    excluded = {"llm", *POLICY_OVERRIDE_SECTIONS.values()}
+    return {
+        key: value
+        for key, value in policy_config.items()
+        if key not in excluded
+    }
+
+
+def resolve_policy_params(
+    policy_config: dict,
+    policy_name: str | None = None,
+) -> PolicyParams:
+    resolved = _policy_base_config(policy_config)
+    if policy_name is not None:
+        section_name = POLICY_OVERRIDE_SECTIONS.get(policy_name)
+        if section_name:
+            resolved.update(policy_config.get(section_name, {}))
+    return PolicyParams.from_dict(resolved).normalized()
 
 
 def build_llm_policy(
@@ -466,7 +493,8 @@ def run_policy_suite(
     scenario_name: str = "paper_default",
     seed: int | None = None,
 ):
-    policy_params = PolicyParams.from_dict(policy_config).normalized()
+    shared_policy_params = resolve_policy_params(policy_config)
+    cost_aware_params = resolve_policy_params(policy_config, "cost_aware")
     effective_seed = experiment_config.get("seed") if seed is None else seed
     steps = int(experiment_config.get("steps", 20))
     observe_steps = max(0, min(int(experiment_config.get("observe_steps", 20)), steps))
@@ -477,10 +505,11 @@ def run_policy_suite(
         experiment_config.get("initial_instruction_empty", False)
     )
 
-    policies: dict[str, PolicyFactory] = {
-        "never_migrate": lambda: NeverMigratePolicy(),
-        "nearest": lambda: NearestPolicy(),
-        "cost_aware": lambda: CostAwarePolicy(policy_params),
+    policies: dict[str, tuple[PolicyFactory, PolicyParams]] = {
+        "never_migrate": (lambda: NeverMigratePolicy(), shared_policy_params),
+        "nearest": (lambda: NearestPolicy(), shared_policy_params),
+        "myopic": (lambda: MyopicPolicy(shared_policy_params), shared_policy_params),
+        "cost_aware": (lambda: CostAwarePolicy(cost_aware_params), cost_aware_params),
     }
 
     base_metadata = build_run_metadata(experiment_config, scenario_name, effective_seed)
@@ -488,8 +517,8 @@ def run_policy_suite(
     step_results: list[dict[str, Any]] = []
     llm_rows: list[dict[str, Any]] = []
 
-    for name, policy_factory in policies.items():
-        env = build_environment(env_config, policy_params, seed=effective_seed)
+    for name, (policy_factory, env_policy_params) in policies.items():
+        env = build_environment(env_config, env_policy_params, seed=effective_seed)
         policy = policy_factory()
         runner = SimulationRunner(env, policy)
         metrics = runner.run(steps)
@@ -526,13 +555,13 @@ def run_policy_suite(
             initial_experiment_config["operator_instruction"] = ""
 
         built_llm_policy = build_llm_policy(
-            policy_params,
+            cost_aware_params,
             policy_config,
             initial_experiment_config,
         )
         llm_policy = built_llm_policy.policy
         llm_policy_name = f"llm_cost_aware_{built_llm_policy.provider_name}"
-        env = build_environment(env_config, policy_params, seed=effective_seed)
+        env = build_environment(env_config, cost_aware_params, seed=effective_seed)
         runner = SimulationRunner(env, llm_policy)
         llm_step_metrics = []
 

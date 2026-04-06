@@ -24,6 +24,12 @@ class PolicyParams:
     resource_tension_max: float
     allocation_failure_penalty: float
 
+    enhanced_relative_gain_threshold: float = 0.04
+    enhanced_stay_bias: float = 0.08
+    enhanced_priority_boost: float = 0.35
+    enhanced_delay_budget_ref: float = 40.0
+    enhanced_business_sensitivity: float = 0.45
+
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> "PolicyParams":
         return cls(
@@ -42,6 +48,15 @@ class PolicyParams:
             migration_norm_factor=float(config_dict["migration_norm_factor"]),
             resource_tension_max=float(config_dict["resource_tension_max"]),
             allocation_failure_penalty=float(config_dict["allocation_failure_penalty"]),
+            enhanced_relative_gain_threshold=float(
+                config_dict["enhanced_relative_gain_threshold"]
+            ),
+            enhanced_stay_bias=float(config_dict["enhanced_stay_bias"]),
+            enhanced_priority_boost=float(config_dict["enhanced_priority_boost"]),
+            enhanced_delay_budget_ref=float(config_dict["enhanced_delay_budget_ref"]),
+            enhanced_business_sensitivity=float(
+                config_dict["enhanced_business_sensitivity"]
+            ),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -80,4 +95,18 @@ class PolicyParams:
             migration_norm_factor=max(float(self.migration_norm_factor), 1e-6),
             resource_tension_max=max(float(self.resource_tension_max), 1e-6),
             allocation_failure_penalty=max(float(self.allocation_failure_penalty), 0.0),
+            enhanced_relative_gain_threshold=min(
+                max(float(self.enhanced_relative_gain_threshold), 0.0),
+                1.0,
+            ),
+            enhanced_stay_bias=max(float(self.enhanced_stay_bias), 0.0),
+            enhanced_priority_boost=max(float(self.enhanced_priority_boost), 0.0),
+            enhanced_delay_budget_ref=max(
+                float(self.enhanced_delay_budget_ref),
+                1e-6,
+            ),
+            enhanced_business_sensitivity=max(
+                float(self.enhanced_business_sensitivity),
+                0.0,
+            ),
         )

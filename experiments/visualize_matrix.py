@@ -49,9 +49,24 @@ def _policy_color(policy: str) -> str:
     colors = {
         "never_migrate": "#C44E52",
         "nearest": "#4C72B0",
+        "myopic": "#8172B3",
         "cost_aware": "#55A868",
     }
     return colors.get(policy, "#667085")
+
+
+def _policy_rank(policy: str) -> int:
+    order = {
+        "never_migrate": 0,
+        "nearest": 1,
+        "myopic": 2,
+        "cost_aware": 3,
+        "llm_cost_aware_openrouter": 4,
+        "llm_cost_aware_mock": 4,
+    }
+    if policy.startswith("llm_cost_aware_"):
+        return 4
+    return order.get(policy, 99)
 
 
 def visualize_matrix_main_comparison(
@@ -76,7 +91,12 @@ def visualize_matrix_main_comparison(
     axes = axes.flatten()
 
     for ax, (metric, title) in zip(axes, metrics):
-        sub_df = scenario_df.sort_values(metric, ascending=metric != "qos_index_mean")
+        sub_df = scenario_df.copy()
+        sub_df["_policy_rank"] = sub_df["Policy"].map(_policy_rank)
+        sub_df = sub_df.sort_values(
+            ["_policy_rank", metric],
+            ascending=[True, metric != "qos_index_mean"],
+        )
         colors = [_policy_color(policy) for policy in sub_df["Policy"]]
         ax.barh(sub_df["Policy"], sub_df[metric], color=colors)
         ax.set_title(f"{title} ({scenario_name})", loc="left", pad=10)
@@ -105,6 +125,7 @@ def visualize_scenario_cost_comparison(
         columns="Policy",
         values="avg_total_cost_mean",
     )
+    pivot_df = pivot_df[[column for column in sorted(pivot_df.columns, key=_policy_rank)]]
 
     fig, ax = plt.subplots(figsize=(11, 5.6))
     for policy in pivot_df.columns:

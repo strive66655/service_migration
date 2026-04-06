@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 import pandas as pd
-from experiments.run_experiment import run_policy_suite
+from experiments.run_experiment import resolve_policy_params, run_policy_suite
 from src.algorithms.policy_params import PolicyParams
 from src.utils.config_loader import load_config
 
@@ -86,9 +86,11 @@ def main() -> None:
     for values in product(*(SEARCH_SPACE[key] for key in keys)):
         trial_overrides = dict(zip(keys, values))
         trial_config = deepcopy(policy_config)
-        trial_config.update(trial_overrides)
-        trial_params = PolicyParams.from_dict(trial_config).normalized()
-        trial_config.update(trial_params.to_dict())
+        cost_aware_config = deepcopy(trial_config.get("cost_aware", {}))
+        cost_aware_config.update(trial_overrides)
+        trial_config["cost_aware"] = cost_aware_config
+        trial_params = resolve_policy_params(trial_config, "cost_aware")
+        trial_config["cost_aware"] = trial_params.to_dict()
 
         scenario_rows = _score_candidate(trial_config, env_config, experiment_config)
         mean_margin = sum(row["cost_margin_vs_nearest"] for row in scenario_rows) / len(scenario_rows)

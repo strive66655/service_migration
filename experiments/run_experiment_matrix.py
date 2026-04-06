@@ -214,7 +214,7 @@ def _build_report_markdown(
         "",
         "- 主场景：`paper_default`。",
         "- 扰动场景：`user_scale_up`、`capacity_tight`、`mobility_jitter`、`ar_heavy_mix`。",
-        "- 对比策略：`never_migrate`、`nearest`、`cost_aware`、`llm_cost_aware_*`。",
+        "- 对比策略：`never_migrate`、`nearest`、`myopic`、`cost_aware`、`llm_cost_aware_*`。",
         "- 统计方式：对每个场景使用 5 个随机种子，报告均值和标准差。",
         "",
         "## 主结果",

@@ -5,10 +5,10 @@ cooldown_steps: 2
 max_candidates: 4
 
 # 多目标权重
-lambda_delay: 0.25
-lambda_migration: 0.25
-lambda_resource: 0.25
-lambda_balance: 0.25
+lambda_delay: 0.22
+lambda_migration: 0.35
+lambda_resource: 0.23
+lambda_balance: 0.20
 
 # transmission_delay 系数
 queue_penalty_coeff: 24.0
@@ -17,7 +17,7 @@ sensitivity_coeff: 0.25
 # migration_cost 系数
 migration_state_coeff: 0.15
 migration_hops_coeff: 8.0
-migration_norm_factor: 20.0
+migration_norm_factor: 12.0
 
 # 资源紧张上限
 resource_tension_max: 4.0
@@ -25,8 +25,15 @@ resource_tension_max: 4.0
 # allocation failure penalty
 allocation_failure_penalty: 50.0
 
+# cost-aware stability controls
+enhanced_relative_gain_threshold: 0.04
+enhanced_stay_bias: 0.08
+enhanced_priority_boost: 0.35
+enhanced_delay_budget_ref: 40.0
+enhanced_business_sensitivity: 0.45
+
 llm:
   provider: openrouter
   model: openai/gpt-5.4-mini
-  update_interval: 1
+  update_interval: 5
   temperature: 0.1
